@@ -183,9 +183,11 @@ def _sale_from_csv(row: Dict[str, object], line_number: int) -> Optional[Sale]:
 class SalesRepository:
     """Read observed transactions from the existing SQLite store and CSV import."""
 
-    def __init__(self, base_dir: Path):
+    def __init__(self, base_dir: Path, db_path: Optional[Path] = None):
         self.base_dir = Path(base_dir)
-        self.db_path = self.base_dir / "prospectr.db"
+        # The CSV ships with the application, while the SQLite store can live
+        # on a managed host's persistent disk.
+        self.db_path = Path(db_path) if db_path is not None else self.base_dir / "prospectr.db"
         self.csv_path = self.base_dir / "sales_data.csv"
 
     def _database_sales(self) -> List[Sale]:

@@ -12,7 +12,7 @@ services:
       - key: CARDR_DATA_DIR
         value: /var/data
       - key: CARDR_ALLOWED_HOSTS
-        value: cardrsports.com,www.cardrsports.com
+        value: cardrsports.com,www.cardrsports.com,*.onrender.com
     disk:
       name: cardr-data
       mountPath: /var/data

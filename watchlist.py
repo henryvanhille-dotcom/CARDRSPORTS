@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlparse
 
+import database
 from database import get_connection, initialize_database
 from market_data import SalesRepository, normalize_text
 from valuation import CardQuery, calculate_valuation
@@ -252,7 +253,7 @@ def get_watchlist_card(watchlist_id: int) -> Optional[Dict[str, Any]]:
     card = _row(watchlist_id)
     if card is None:
         return None
-    return _enrich(card, SalesRepository(BASE_DIR).all_observed_sales())
+    return _enrich(card, SalesRepository(BASE_DIR, db_path=database.DATABASE).all_observed_sales())
 
 
 def get_watchlist_cards(search: str = "", priority_only: bool = False) -> List[Dict[str, Any]]:
@@ -268,7 +269,7 @@ def get_watchlist_cards(search: str = "", priority_only: bool = False) -> List[D
     query += " ORDER BY priority DESC, created_at DESC, id DESC"
     with get_connection() as connection:
         cards = [dict(row) for row in connection.execute(query, params).fetchall()]
-    sales = SalesRepository(BASE_DIR).all_observed_sales()
+    sales = SalesRepository(BASE_DIR, db_path=database.DATABASE).all_observed_sales()
     return [_enrich(card, sales) for card in cards]
 
 

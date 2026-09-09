@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from database import get_connection, initialize_database, save_sales
+from database import DATABASE, get_connection, initialize_database, save_sales
 from cardr_score import build_card_price_history, calculate_cardr_score
 from market_data import SalesRepository
 from market_pulse import build_market_pulse
@@ -62,7 +62,7 @@ def _image_extension(content: bytes) -> Optional[str]:
 
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-repository = SalesRepository(BASE_DIR)
+repository = SalesRepository(BASE_DIR, db_path=DATABASE)
 
 app = FastAPI(
     title="Cardr — Baseball Card Intelligence",
@@ -76,7 +76,7 @@ allowed_hosts = [
     host.strip()
     for host in os.getenv(
         "CARDR_ALLOWED_HOSTS",
-        "cardrsports.com,www.cardrsports.com,localhost,127.0.0.1",
+        "cardrsports.com,www.cardrsports.com,*.onrender.com,localhost,127.0.0.1",
     ).split(",")
     if host.strip()
 ]

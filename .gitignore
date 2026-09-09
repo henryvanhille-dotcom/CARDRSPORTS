@@ -3,6 +3,7 @@ prospectr.db
 prospectr.db-shm
 prospectr.db-wal
 uploads/
+player_cache/
 .env
 .venv/
 __pycache__/

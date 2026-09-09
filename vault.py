@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
+import database
 from database import get_connection, initialize_database
 from market_data import SalesRepository
 from valuation import CardQuery, calculate_valuation
@@ -563,7 +564,7 @@ def analyze_vault_card(card_id: int) -> Optional[Dict[str, Any]]:
     query = CardQuery.from_mapping(card)
     valuation = calculate_valuation(
         query,
-        SalesRepository(BASE_DIR).all_observed_sales(),
+        SalesRepository(BASE_DIR, db_path=database.DATABASE).all_observed_sales(),
     )
     status = "analyzed" if valuation["status"] == "estimated" else "insufficient_data"
     updated = update_vault_card(
