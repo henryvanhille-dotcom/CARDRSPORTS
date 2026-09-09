@@ -1,0 +1,12 @@
+# Local application data and secrets must not be committed to the deployment repo.
+prospectr.db
+prospectr.db-shm
+prospectr.db-wal
+uploads/
+.env
+.venv/
+__pycache__/
+*.py[cod]
+
+player_cache/
+cardr_project_code.txt

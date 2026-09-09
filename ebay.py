@@ -1,0 +1,1178 @@
+import os
+import re
+import hashlib
+import requests
+from typing import Optional
+
+
+BASE_URL = "https://thecardapi.com/api/v1/market"
+USD_TO_CAD = 1.38
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def normalize_text(value):
+    if value is None:
+        return ""
+
+    text = str(value).lower()
+
+    text = text.replace("’", "'")
+    text = text.replace("–", "-")
+    text = text.replace("—", "-")
+    text = text.replace("&", " and ")
+
+    text = re.sub(r"[^a-z0-9#./ -]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+
+    return text.strip()
+
+
+# ============================================================
+# CARD DETECTION
+# ============================================================
+
+def detect_grade(title):
+    text = normalize_text(title)
+
+    patterns = [
+        r"\b(psa|bgs|sgc|cgc|csg|hga|ags)\s*([0-9]{1,2}(?:\.[0-9])?)\b",
+        r"\bgrade\s*([0-9]{1,2}(?:\.[0-9])?)\b",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text)
+
+        if match:
+            groups = match.groups()
+
+            if len(groups) == 2:
+                return groups[1], groups[0].upper()
+
+            return groups[0], None
+
+    return None, None
+
+
+def detect_parallel(title):
+    text = normalize_text(title)
+
+    parallels = [
+        "superfractor",
+        "snakeskin",
+        "gold vinyl",
+        "gold wave",
+        "gold shimmer",
+        "gold refractor",
+        "orange refractor",
+        "red refractor",
+        "blue refractor",
+        "green refractor",
+        "purple refractor",
+        "pink refractor",
+        "aqua refractor",
+        "silver refractor",
+        "black refractor",
+        "white refractor",
+        "refractor",
+        "xfractor",
+        "speckle",
+        "shimmer",
+        "atomic",
+        "cosmic",
+        "mojo",
+        "wave",
+        "velocity",
+        "ice",
+        "prizm",
+        "gold",
+        "orange",
+        "red",
+        "blue",
+        "green",
+        "purple",
+        "pink",
+        "aqua",
+        "silver",
+        "black",
+        "white",
+    ]
+
+    for parallel in parallels:
+        if parallel in text:
+            return parallel
+
+    return None
+
+
+def detect_numbering(title):
+    text = normalize_text(title)
+
+    match = re.search(
+        r"\b(\d{1,5})\s*/\s*(\d{1,5})\b",
+        text
+    )
+
+    if match:
+        return f"{match.group(1)}/{match.group(2)}"
+
+    return None
+
+
+def detect_rookie(title):
+    text = normalize_text(title)
+
+    return bool(
+        re.search(r"\brc\b", text)
+        or re.search(r"\brookie\b", text)
+    )
+
+
+def detect_autograph(title):
+    text = normalize_text(title)
+
+    negative = [
+        r"\bno auto\b",
+        r"\bnon auto\b",
+        r"\bunsigned\b",
+    ]
+
+    for pattern in negative:
+        if re.search(pattern, text):
+            return False
+
+    positive = [
+        r"\bauto\b",
+        r"\bautograph\b",
+        r"\bautographed\b",
+        r"\bsigned\b",
+        r"\bsignature\b",
+    ]
+
+    return any(
+        re.search(pattern, text)
+        for pattern in positive
+    )
+
+
+def is_raw_sale(sale):
+    title = normalize_text(
+        sale.get("title", "")
+    )
+
+    if sale.get("grade"):
+        return False
+
+    if sale.get("grading_company"):
+        return False
+
+    if sale.get("grader"):
+        return False
+
+    grading_patterns = [
+        r"\bpsa\s*[0-9]+\b",
+        r"\bbgs\s*[0-9]+\b",
+        r"\bsgc\s*[0-9]+\b",
+        r"\bcgc\s*[0-9]+\b",
+        r"\bcsg\s*[0-9]+\b",
+        r"\bhga\s*[0-9]+\b",
+        r"\bags\s*[0-9]+\b",
+    ]
+
+    return not any(
+        re.search(pattern, title)
+        for pattern in grading_patterns
+    )
+
+
+# ============================================================
+# API
+# ============================================================
+
+def _request_sales(
+    query,
+    limit=50,
+    graded=None,
+):
+
+    api_key = os.getenv("CARD_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "CARD_API_KEY is not set."
+        )
+
+    params = {
+        "q": query,
+        "limit": limit,
+    }
+
+    headers = {
+        "x-market-api-key": api_key,
+        "Accept": "application/json",
+    }
+
+    response = requests.get(
+        f"{BASE_URL}/sales",
+        params=params,
+        headers=headers,
+        timeout=20,
+    )
+
+    print(
+        "API STATUS:",
+        response.status_code
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    if isinstance(data, dict):
+        return (
+            data.get("data")
+            or data.get("sales")
+            or data.get("results")
+            or []
+        )
+
+    if isinstance(data, list):
+        return data
+
+    return []
+
+
+# ============================================================
+# NORMALIZE SALES
+# ============================================================
+
+def normalize_sale(sale):
+
+    title = sale.get("title") or ""
+
+    price = sale.get("price")
+
+    if price is None:
+        price = sale.get("sale_price")
+
+    if price is None:
+        price = sale.get("original_price")
+
+    try:
+        price = float(price)
+    except (TypeError, ValueError):
+        price = None
+
+    currency = str(
+        sale.get("currency")
+        or "USD"
+    ).upper()
+
+    if price is not None:
+
+        if currency == "CAD":
+            price_cad = price
+            price_usd = price / USD_TO_CAD
+
+        else:
+            price_usd = price
+            price_cad = price * USD_TO_CAD
+
+    else:
+        price_usd = None
+        price_cad = None
+
+    detected_grade, detected_company = (
+        detect_grade(title)
+    )
+
+    grade = (
+        sale.get("grade")
+        or detected_grade
+    )
+
+    grading_company = (
+        sale.get("grading_company")
+        or sale.get("grader")
+        or detected_company
+    )
+
+    sale_id = sale.get("id")
+
+    if not sale_id:
+        sale_id = hashlib.sha256(
+            (
+                f"{title}|"
+                f"{sale.get('sale_date')}|"
+                f"{price}"
+            ).encode()
+        ).hexdigest()[:24]
+
+    return {
+        "id": str(sale_id),
+
+        "title": title,
+
+        "platform": sale.get(
+            "platform"
+        ),
+
+        "listing_type": sale.get(
+            "listing_type"
+        ),
+
+        "sale_date": sale.get(
+            "sale_date"
+        ),
+
+        "sold_at": sale.get(
+            "sold_at"
+        ),
+
+        "price_original": price,
+
+        "currency": currency,
+
+        "price_usd": price_usd,
+
+        "price_cad": price_cad,
+
+        "price_confirmed": sale.get(
+            "price_confirmed"
+        ),
+
+        "bids": sale.get(
+            "bids"
+        ),
+
+        "image_url": sale.get(
+            "image_url"
+        ),
+
+        "thumbnail_url": sale.get(
+            "thumbnail_url"
+        ),
+
+        "listing_url": sale.get(
+            "listing_url"
+        ),
+
+        "cert": sale.get(
+            "cert"
+        ),
+
+        "condition": sale.get(
+            "condition"
+        ),
+
+        "grade": (
+            str(grade)
+            if grade is not None
+            else None
+        ),
+
+        "grader": sale.get(
+            "grader"
+        ),
+
+        "grading_company":
+            grading_company,
+
+        "is_autograph":
+            detect_autograph(title),
+
+        "is_rookie":
+            detect_rookie(title),
+
+        "is_numbered":
+            bool(
+                detect_numbering(title)
+            ),
+
+        "serial_number":
+            detect_numbering(title),
+
+        "detected_parallel":
+            detect_parallel(title),
+
+        "match_score": 0,
+
+        "match_confidence":
+            "unmatched",
+
+        "match_reason":
+            "",
+
+        "raw": sale,
+    }
+
+
+# ============================================================
+# RAW API SEARCH
+# ============================================================
+
+def search_real_sales(
+    query,
+    limit=50,
+    graded=None,
+):
+
+    raw_sales = _request_sales(
+        query=query,
+        limit=limit,
+        graded=graded,
+    )
+
+    sales = []
+
+    for raw in raw_sales:
+
+        try:
+            sales.append(
+                normalize_sale(raw)
+            )
+
+        except Exception as exc:
+            print(
+                "NORMALIZATION ERROR:",
+                repr(exc)
+            )
+
+    return sales
+
+
+# ============================================================
+# PLAYER MATCH
+# ============================================================
+
+def player_match(player, title):
+
+    player = normalize_text(player)
+    title = normalize_text(title)
+
+    if not player:
+        return True
+
+    # Exact player phrase.
+    if player in title:
+        return True
+
+    # First + last name fallback.
+    parts = player.split()
+
+    if len(parts) >= 2:
+
+        first = parts[0]
+        last = parts[-1]
+
+        if (
+            re.search(
+                rf"\b{re.escape(first)}\b",
+                title
+            )
+            and
+            re.search(
+                rf"\b{re.escape(last)}\b",
+                title
+            )
+        ):
+            return True
+
+    return False
+
+
+# ============================================================
+# YEAR MATCH
+# ============================================================
+
+def year_match(year, title):
+
+    if not year:
+        return True
+
+    return bool(
+        re.search(
+            rf"\b{int(year)}\b",
+            normalize_text(title)
+        )
+    )
+
+
+# ============================================================
+# SET / PRODUCT MATCHING
+# ============================================================
+
+# Products that contain "Topps" but are NOT the flagship
+# Topps base product.
+TOPPS_VARIANTS = [
+    "chrome",
+    "heritage",
+    "tribute",
+    "update",
+    "allen ginter",
+    "allen and ginter",
+    "gypsy queen",
+    "finest",
+    "museum",
+    "archives",
+    "opening day",
+    "stadium club",
+    "fire",
+    "gallery",
+    "inception",
+    "tier one",
+    "dynasty",
+    "luminaries",
+    "gold label",
+    "big league",
+    "pro debut",
+    "holiday",
+    "heritage high number",
+    "heritage minors",
+    "total",
+    "living",
+    "brooklyn",
+    "jumbo",
+    "mini",
+    "minis",
+    "3d",
+    "diamond anniversary",
+]
+
+
+def is_topps_flagship_base(
+    title,
+    year=0,
+    parallel=None,
+):
+
+    text = normalize_text(title)
+
+    # We need "Topps" in the title.
+    if not re.search(
+        r"\btopps\b",
+        text
+    ):
+        return False
+
+    # If year is supplied, prefer "YEAR Topps".
+    if year:
+
+        year_topps = (
+            rf"\b{int(year)}\s+topps\b"
+        )
+
+        if not re.search(
+            year_topps,
+            text
+        ):
+            return False
+
+    # If a specific parallel is requested,
+    # variants may be valid depending on the card.
+    # Otherwise we're looking specifically for flagship base.
+    if parallel:
+        return True
+
+    # Reject known Topps sub-products.
+    for variant in TOPPS_VARIANTS:
+
+        if re.search(
+            rf"\btopps\s+{re.escape(variant)}\b",
+            text
+        ):
+            return False
+
+        # Handles titles like:
+        # "2012 Topps - 1987 Topps Minis"
+        if re.search(
+            rf"\b{re.escape(variant)}\b",
+            text
+        ):
+            return False
+
+    return True
+
+
+def set_match(
+    set_name,
+    title,
+    year=0,
+    parallel=None,
+):
+
+    if not set_name:
+        return True
+
+    set_name = normalize_text(
+        set_name
+    )
+
+    title = normalize_text(
+        title
+    )
+
+    # Special handling for the generic
+    # "Topps" flagship product.
+    if set_name == "topps":
+
+        return is_topps_flagship_base(
+            title,
+            year=year,
+            parallel=parallel,
+        )
+
+    # Multi-word set names.
+    words = set_name.split()
+
+    if len(words) >= 2:
+
+        # Prefer exact phrase.
+        if set_name in title:
+            return True
+
+        return all(
+            word in title
+            for word in words
+        )
+
+    return bool(
+        re.search(
+            rf"\b{re.escape(set_name)}\b",
+            title
+        )
+    )
+
+
+# ============================================================
+# CARD TYPE MATCH
+# ============================================================
+
+def card_type_match(
+    card_type,
+    sale,
+):
+
+    requested = normalize_text(
+        card_type or "base"
+    )
+
+    title = normalize_text(
+        sale.get("title", "")
+    )
+
+    # --------------------------------------------------------
+    # BASE
+    # --------------------------------------------------------
+
+    if requested in {
+        "base",
+        "base card",
+        "standard",
+    }:
+
+        # No autograph.
+        if sale.get(
+            "is_autograph"
+        ):
+            return False
+
+        # No parallel.
+        if sale.get(
+            "detected_parallel"
+        ):
+            return False
+
+        # No serial numbering.
+        if sale.get(
+            "is_numbered"
+        ):
+            return False
+
+        return True
+
+    # --------------------------------------------------------
+    # ROOKIE
+    # --------------------------------------------------------
+
+    if requested in {
+        "rookie",
+        "rc",
+        "rookie card",
+    }:
+
+        return sale.get(
+            "is_rookie",
+            False
+        )
+
+    # --------------------------------------------------------
+    # AUTOGRAPH
+    # --------------------------------------------------------
+
+    if requested in {
+        "auto",
+        "autograph",
+        "signed",
+        "signature",
+    }:
+
+        return sale.get(
+            "is_autograph",
+            False
+        )
+
+    # --------------------------------------------------------
+    # OTHER CARD TYPES
+    # --------------------------------------------------------
+
+    return requested in title
+
+
+# ============================================================
+# PARALLEL MATCH
+# ============================================================
+
+def parallel_match(
+    parallel,
+    sale,
+):
+
+    # No requested parallel means
+    # base/standard card only.
+    if not parallel:
+        return True
+
+    requested = normalize_text(
+        parallel
+    )
+
+    title = normalize_text(
+        sale.get("title", "")
+    )
+
+    detected = normalize_text(
+        sale.get(
+            "detected_parallel"
+        ) or ""
+    )
+
+    return (
+        requested in title
+        or requested == detected
+    )
+
+
+# ============================================================
+# GRADE MATCH
+# ============================================================
+
+def grade_match(
+    grade,
+    sale,
+):
+
+    if not grade:
+        return True
+
+    requested = normalize_text(
+        grade
+    )
+
+    # Raw.
+    if requested in {
+        "raw",
+        "ungraded",
+    }:
+
+        return is_raw_sale(
+            sale
+        )
+
+    sale_grade = normalize_text(
+        sale.get("grade")
+        or ""
+    )
+
+    sale_company = normalize_text(
+        sale.get(
+            "grading_company"
+        )
+        or sale.get("grader")
+        or ""
+    )
+
+    grade_number = re.search(
+        r"([0-9]{1,2}(?:\.[0-9])?)",
+        requested
+    )
+
+    if grade_number:
+
+        requested_number = (
+            grade_number.group(1)
+        )
+
+        if sale_grade != requested_number:
+            return False
+
+    for company in [
+        "psa",
+        "bgs",
+        "sgc",
+        "cgc",
+        "csg",
+        "hga",
+        "ags",
+    ]:
+
+        if company in requested:
+
+            if company not in sale_company:
+                return False
+
+    return True
+
+
+# ============================================================
+# BAD LISTINGS
+# ============================================================
+
+def obvious_bad_match(sale):
+
+    title = normalize_text(
+        sale.get("title", "")
+    )
+
+    bad_patterns = [
+        r"\blot\b",
+        r"\blots\b",
+        r"\bcollection\b",
+        r"\bcomplete set\b",
+        r"\bteam set\b",
+        r"\bbox\b",
+        r"\bpack\b",
+        r"\bbundle\b",
+        r"\bcase\b",
+    ]
+
+    return any(
+        re.search(
+            pattern,
+            title
+        )
+        for pattern in bad_patterns
+    )
+
+
+# ============================================================
+# SCORE
+# ============================================================
+
+def score_sale(
+    sale,
+    player,
+    year,
+    set_name,
+    card_type,
+    parallel,
+    grade,
+):
+
+    title = sale.get(
+        "title",
+        ""
+    )
+
+    # Player.
+    if not player_match(
+        player,
+        title,
+    ):
+        return -1, "wrong player"
+
+    # Year.
+    if not year_match(
+        year,
+        title,
+    ):
+        return -1, "wrong year"
+
+    # Set/product.
+    if not set_match(
+        set_name,
+        title,
+        year=year,
+        parallel=parallel,
+    ):
+        return -1, "wrong set/product"
+
+    # Card type.
+    if not card_type_match(
+        card_type,
+        sale,
+    ):
+        return -1, "wrong card type"
+
+    # Parallel.
+    if not parallel_match(
+        parallel,
+        sale,
+    ):
+        return -1, "wrong parallel"
+
+    # Grade.
+    if not grade_match(
+        grade,
+        sale,
+    ):
+        return -1, "wrong grade"
+
+    # Lots/bundles.
+    if obvious_bad_match(
+        sale
+    ):
+        return -1, "lot/bundle"
+
+    score = 50
+    reasons = [
+        "player"
+    ]
+
+    if year:
+        score += 20
+        reasons.append(
+            "year"
+        )
+
+    if set_name:
+        score += 20
+        reasons.append(
+            "set"
+        )
+
+    if parallel:
+        score += 10
+        reasons.append(
+            "parallel"
+        )
+
+    if grade:
+        score += 10
+        reasons.append(
+            "grade"
+        )
+
+    if sale.get(
+        "image_url"
+    ):
+        score += 2
+
+    if sale.get(
+        "listing_url"
+    ):
+        score += 2
+
+    return (
+        score,
+        ", ".join(reasons)
+    )
+
+
+# ============================================================
+# MAIN PROSPECTR SEARCH
+# ============================================================
+
+def search_card_sales(
+    player,
+    year=0,
+    set_name="",
+    card_type="Base",
+    parallel=None,
+    grade=None,
+    days=3,
+):
+
+    queries = []
+
+    # Most specific search.
+    specific = [
+        player,
+        str(year) if year else "",
+        set_name,
+        parallel or "",
+    ]
+
+    specific = [
+        x.strip()
+        for x in specific
+        if x
+    ]
+
+    if specific:
+        queries.append(
+            " ".join(specific)
+        )
+
+    # Player + year.
+    if player and year:
+        queries.append(
+            f"{player} {year}"
+        )
+
+    # Player only.
+    if player:
+        queries.append(
+            player
+        )
+
+    # Remove duplicates.
+    unique_queries = []
+
+    for query in queries:
+
+        if query not in unique_queries:
+            unique_queries.append(
+                query
+            )
+
+    all_sales = {}
+
+    for level, query in enumerate(
+        unique_queries,
+        start=1
+    ):
+
+        try:
+
+            raw_results = search_real_sales(
+                query=query,
+                limit=50,
+            )
+
+            print(
+                f"Prospectr search "
+                f"level {level}: "
+                f"{query} -> "
+                f"{len(raw_results)} results"
+            )
+
+            for sale in raw_results:
+
+                score, reason = score_sale(
+                    sale=sale,
+                    player=player,
+                    year=year,
+                    set_name=set_name,
+                    card_type=card_type,
+                    parallel=parallel,
+                    grade=grade,
+                )
+
+                if score < 0:
+                    continue
+
+                sale[
+                    "match_score"
+                ] = score
+
+                sale[
+                    "match_reason"
+                ] = reason
+
+                if score >= 90:
+                    sale[
+                        "match_confidence"
+                    ] = "high"
+
+                elif score >= 70:
+                    sale[
+                        "match_confidence"
+                    ] = "medium"
+
+                else:
+                    sale[
+                        "match_confidence"
+                    ] = "low"
+
+                sale_id = sale[
+                    "id"
+                ]
+
+                existing = all_sales.get(
+                    sale_id
+                )
+
+                if (
+                    existing is None
+                    or score >
+                    existing.get(
+                        "match_score",
+                        0
+                    )
+                ):
+
+                    all_sales[
+                        sale_id
+                    ] = sale
+
+        except Exception as exc:
+
+            print(
+                "SEARCH ERROR:",
+                repr(exc)
+            )
+
+    sales = list(
+        all_sales.values()
+    )
+
+    sales.sort(
+        key=lambda x: (
+            x.get(
+                "match_score",
+                0
+            ),
+            x.get(
+                "sale_date"
+            ) or ""
+        ),
+        reverse=True,
+    )
+
+    return {
+        "sales": sales[:50],
+
+        "query_used": (
+            unique_queries[0]
+            if unique_queries
+            else ""
+        ),
+
+        "search_level": (
+            1
+            if sales
+            else 0
+        ),
+    }
+
+
+# ============================================================
+# LATEST MARKET SALES
+# ============================================================
+
+def get_latest_market_sales(
+    query="",
+    limit=12,
+):
+
+    if query:
+
+        return search_real_sales(
+            query=query,
+            limit=limit,
+        )
+
+    return []

@@ -1,0 +1,7 @@
+player,year,set_name,card_type,parallel,grade,is_serialized,print_run,sale_price_usd,sale_date,source
+Roman Anthony,2024,Prizm,SP,Snakeskin,PSA 10,false,,425,SAMPLE,sample
+Roman Anthony,2024,Prizm,SP,Snakeskin,PSA 10,false,,450,SAMPLE,sample
+Roman Anthony,2024,Prizm,SP,Snakeskin,PSA 10,false,,475,SAMPLE,sample
+Daniel Hernandez,2026,Bowman Chrome,1st Bowman Chrome,Base,Raw,false,,2,SAMPLE,sample
+Daniel Hernandez,2026,Bowman Chrome,1st Bowman Chrome,Base,Raw,false,,2,SAMPLE,sample
+Reggie Jackson,2026,Donruss,Insert,Alter Ego,Raw,false,,150,SAMPLE,sample

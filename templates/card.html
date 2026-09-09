@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#05070b">
+  <title>Prospectr — Card analysis</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: radial-gradient(circle at 15% 0, rgba(59,130,246,.18), transparent 30%), #05070b; }
+    .container { width: min(1120px, calc(100% - 32px)); margin: auto; }
+    nav { border-bottom: 1px solid rgba(255,255,255,.07); background: rgba(5,7,11,.8); backdrop-filter: blur(20px); }
+    .nav { min-height: 68px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 21px; font-weight: 950; letter-spacing: -1px; }
+    .logo span, .eyebrow { color: #60a5fa; }
+    .back { color: #94a3b8; text-decoration: none; font-size: 12px; font-weight: 700; }
+    .back:hover { color: #fff; }
+    main { padding: 64px 0; }
+    .eyebrow { font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: 2px; }
+    h1 { margin: 13px 0 8px; font-size: clamp(42px, 7vw, 70px); line-height: .95; letter-spacing: -4px; }
+    .subtitle, .muted { color: #94a3b8; }
+    .search-panel { margin: 34px 0 18px; padding: 22px; border: 1px solid rgba(96,165,250,.22); border-radius: 18px; background: linear-gradient(145deg, rgba(59,130,246,.12), rgba(255,255,255,.025)); }
+    .search-heading { margin: 0 0 5px; font-size: 17px; font-weight: 900; }
+    .search-copy { margin: 0 0 18px; color: #94a3b8; font-size: 13px; line-height: 1.5; }
+    .search-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .field { display: flex; flex-direction: column; gap: 7px; }
+    .field.wide { grid-column: span 2; }
+    .field label { color: #94a3b8; font-size: 11px; font-weight: 750; letter-spacing: .5px; }
+    .field input { width: 100%; min-width: 0; padding: 12px; border: 1px solid rgba(255,255,255,.13); border-radius: 10px; outline: none; background: rgba(5,7,11,.62); color: #f8fafc; font: inherit; }
+    .field input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,.14); }
+    .search-actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+    .analyze-button { padding: 12px 17px; border: 0; border-radius: 10px; background: #60a5fa; color: #07111f; font: inherit; font-size: 13px; font-weight: 900; cursor: pointer; }
+    .analyze-button:hover { background: #93c5fd; }
+    .search-note { color: #94a3b8; font-size: 11px; line-height: 1.4; }
+    .details { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 36px 0 16px; }
+    .detail, .panel { border: 1px solid rgba(255,255,255,.08); border-radius: 18px; background: rgba(255,255,255,.025); }
+    .detail { padding: 18px; }
+    .label { color: #64748b; font-size: 10px; font-weight: 750; letter-spacing: 1px; text-transform: uppercase; }
+    .detail-value { margin-top: 8px; font-weight: 800; overflow-wrap: anywhere; }
+    .analysis { display: grid; grid-template-columns: 1.35fr .65fr; gap: 16px; }
+    .panel { padding: 26px; }
+    .panel-title { font-size: 17px; font-weight: 900; margin-bottom: 18px; }
+    .value-card { padding: 28px; border: 1px solid rgba(96,165,250,.2); border-radius: 18px; background: linear-gradient(145deg, rgba(59,130,246,.13), rgba(255,255,255,.025)); }
+    .price { margin-top: 7px; font-size: clamp(40px, 6vw, 58px); font-weight: 950; letter-spacing: -3px; }
+    .range { margin-top: 8px; color: #94a3b8; font-size: 13px; }
+    .status { display: inline-flex; align-items: center; margin-top: 18px; padding: 7px 10px; border: 1px solid rgba(96,165,250,.25); border-radius: 999px; color: #bfdbfe; font-size: 11px; font-weight: 750; }
+    .notice { margin-top: 16px; padding: 16px; border: 1px solid rgba(245,158,11,.2); border-radius: 14px; color: #cbd5e1; background: rgba(245,158,11,.05); font-size: 12px; line-height: 1.55; }
+    .score { margin: 10px 0 0; font-size: 65px; font-weight: 950; letter-spacing: -4px; text-align: center; }
+    .score-label { color: #64748b; text-align: center; font-size: 11px; }
+    .confidence { margin-top: 25px; }
+    .confidence-row { display: flex; justify-content: space-between; margin-bottom: 8px; color: #94a3b8; font-size: 12px; }
+    .bar { overflow: hidden; height: 8px; border-radius: 99px; background: rgba(255,255,255,.08); }
+    .bar-fill { height: 100%; border-radius: inherit; background: #60a5fa; }
+    .section { margin-top: 16px; }
+    .rationale { margin: 0; padding-left: 20px; color: #cbd5e1; line-height: 1.6; font-size: 13px; }
+    .rationale li + li { margin-top: 8px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 14px 10px; border-bottom: 1px solid rgba(255,255,255,.07); text-align: left; vertical-align: top; }
+    th { color: #64748b; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+    td { color: #dbeafe; }
+    .sale-title { min-width: 270px; color: #f8fafc; font-weight: 700; }
+    .match { display: inline-block; border-radius: 999px; padding: 4px 7px; color: #bfdbfe; background: rgba(59,130,246,.14); font-size: 10px; font-weight: 800; text-transform: capitalize; }
+    .provenance { margin-top: 14px; color: #64748b; font-size: 11px; line-height: 1.5; }
+    @media (max-width: 760px) { .details, .search-grid { grid-template-columns: repeat(2, 1fr); } .analysis { grid-template-columns: 1fr; } main { padding-top: 44px; } }
+    @media (max-width: 480px) { .container { width: calc(100% - 24px); } h1 { letter-spacing: -3px; } .panel { padding: 18px; } .details { gap: 8px; } .detail { padding: 14px; } }
+  </style>
+</head>
+<body>
+  <nav><div class="container nav"><div class="logo">PROSPECTR<span>.</span></div><a class="back" href="/">← Dashboard</a></div></nav>
+  <main class="container">
+    <div class="eyebrow">Prospectr Market Intelligence</div>
+    <h1>{{ card.player or "Card analysis" }}</h1>
+    <div class="subtitle">
+      {{ card.year or "Year unknown" }} · {{ card.set_name or "Set unknown" }}{% if card.card_number %} · #{{ card.card_number }}{% endif %}{% if card.parallel %} · {{ card.parallel }}{% endif %}
+    </div>
+
+    <form class="search-panel" method="get" action="/card" aria-label="Analyze a baseball card">
+      <h2 class="search-heading">Analyze a card</h2>
+      <p class="search-copy">Enter the details you know. Card number and grade make the comparison more precise.</p>
+      <div class="search-grid">
+        <div class="field wide"><label for="player">Player *</label><input id="player" name="player" value="{{ card.player }}" maxlength="160" required placeholder="e.g. Mike Trout" autocomplete="off"></div>
+        <div class="field"><label for="year">Year *</label><input id="year" name="year" value="{{ card.year }}" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required placeholder="2011"></div>
+        <div class="field"><label for="card_number">Card number</label><input id="card_number" name="card_number" value="{{ card.card_number }}" maxlength="80" placeholder="#175"></div>
+        <div class="field wide"><label for="set_name">Set / product *</label><input id="set_name" name="set_name" value="{{ card.set_name }}" maxlength="200" required placeholder="Bowman Chrome"></div>
+        <div class="field"><label for="card_type">Card type</label><input id="card_type" name="card_type" value="{{ card.card_type }}" maxlength="160" placeholder="RC, Base, Insert"></div>
+        <div class="field"><label for="parallel">Parallel</label><input id="parallel" name="parallel" value="{{ card.parallel }}" maxlength="160" placeholder="Base, Refractor"></div>
+        <div class="field"><label for="grade">Grade</label><input id="grade" name="grade" value="{{ card.grade }}" maxlength="80" placeholder="PSA 9 or Raw"></div>
+      </div>
+      <div class="search-actions"><button class="analyze-button" type="submit">Analyze market evidence</button><span class="search-note">Prospectr only shows estimates supported by stored completed-sale evidence.</span></div>
+    </form>
+
+    <section class="details" aria-label="Card details">
+      <div class="detail"><div class="label">Player</div><div class="detail-value">{{ card.player or "Unknown" }}</div></div>
+      <div class="detail"><div class="label">Product</div><div class="detail-value">{{ card.set_name or "Unknown" }}</div></div>
+      <div class="detail"><div class="label">Variation</div><div class="detail-value">{{ card.parallel or "Base / unknown" }}</div></div>
+      <div class="detail"><div class="label">Grade</div><div class="detail-value">{{ card.grade or "Not supplied" }}</div></div>
+    </section>
+
+    <section class="analysis">
+      <div class="panel">
+        <div class="panel-title">Market Value</div>
+        <div class="value-card">
+          <div class="label">Prospectr evidence-based estimate</div>
+          {% if valuation.status == "estimated" %}
+            <div class="price">${{ "%.2f"|format(valuation.estimated_value_cad) }} <span style="font-size:16px;letter-spacing:0">CAD</span></div>
+            <div class="range">Estimated range: ${{ "%.2f"|format(valuation.low_estimate_cad) }} – ${{ "%.2f"|format(valuation.high_estimate_cad) }} CAD</div>
+          {% else %}
+            <div class="price">—</div>
+            <div class="range">No estimate until qualifying sales are stored.</div>
+          {% endif %}
+        </div>
+        <div class="status">{{ valuation.comp_count }} qualifying comp{{ "s" if valuation.comp_count != 1 else "" }} · {{ valuation.exact_comp_count }} exact-card comp{{ "s" if valuation.exact_comp_count != 1 else "" }}</div>
+        <div class="notice"><strong>Evidence policy</strong><br>{{ valuation.valuation_method }} Prospectr never presents sample rows as market transactions.</div>
+      </div>
+
+      <aside class="panel">
+        <div class="panel-title">Market Evidence Score</div>
+        <div class="score">{{ valuation.evidence_score }}</div>
+        <div class="score-label">/ 100 · data support, not a buy/sell signal</div>
+        <div class="confidence">
+          <div class="confidence-row"><span>Confidence</span><strong>{{ valuation.confidence_percent }}%</strong></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ valuation.confidence_percent }}%"></div></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel section">
+      <div class="panel-title">Why Prospectr reached this result</div>
+      <ul class="rationale">{% for point in valuation.rationale %}<li>{{ point }}</li>{% endfor %}</ul>
+    </section>
+
+    <section class="panel section">
+      <div class="panel-title">Comparable sales used</div>
+      {% if valuation.comps %}
+        <div class="table-wrap"><table>
+          <thead><tr><th>Sale</th><th>Price</th><th>Sold</th><th>Source</th><th>Match</th></tr></thead>
+          <tbody>{% for sale in valuation.comps %}
+            <tr>
+              <td class="sale-title">{% if sale.listing_url %}<a href="{{ sale.listing_url }}" target="_blank" rel="noreferrer" style="color:inherit">{{ sale.title }}</a>{% else %}{{ sale.title }}{% endif %}<div class="muted" style="font-size:11px;margin-top:4px">{{ sale.set_name }}{% if sale.card_number %} · #{{ sale.card_number }}{% endif %}{% if sale.grade %} · {{ sale.grade }}{% endif %}</div></td>
+              <td>${{ "%.2f"|format(sale.price_cad) }} CAD</td><td>{{ sale.sale_date or "Date unavailable" }}</td><td>{{ sale.platform }}</td><td><span class="match">{{ sale.match_level|replace("_", " ") }}</span></td>
+            </tr>
+          {% endfor %}</tbody>
+        </table></div>
+      {% else %}
+        <p class="muted">No qualifying comps are stored yet. Add completed sales from a supported source, then re-run this analysis.</p>
+      {% endif %}
+      <div class="provenance">Sources currently loaded: {{ data_quality.sources|join(", ") if data_quality.sources else "none" }}. {{ data_quality.sample_rows_excluded }} sample row{{ "s" if data_quality.sample_rows_excluded != 1 else "" }} excluded from market evidence.</div>
+    </section>
+  </main>
+</body>
+</html>

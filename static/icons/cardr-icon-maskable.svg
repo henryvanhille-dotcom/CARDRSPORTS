@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Cardr maskable app icon</title>
+  <desc id="desc">A blue Cardr C centered inside a baseball-card shape with a dark background.</desc>
+  <defs>
+    <linearGradient id="maskable-gradient" x1="114" y1="102" x2="398" y2="410" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8ed0ff"/>
+      <stop offset="1" stop-color="#7268ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#090b16"/>
+  <circle cx="256" cy="256" r="196" fill="#111933"/>
+  <rect x="126" y="108" width="260" height="296" rx="44" fill="#182242" stroke="#4b6090" stroke-width="10"/>
+  <path d="M350 177c-23-25-54-38-89-38-66 0-119 53-119 119s53 119 119 119c35 0 66-14 89-38l-33-33c-15 14-34 22-56 22-39 0-70-31-70-70s31-70 70-70c22 0 41 8 56 22z" fill="url(#maskable-gradient)"/>
+  <circle cx="332" cy="349" r="14" fill="#63e4d4"/>
+</svg>

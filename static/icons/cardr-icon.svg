@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Cardr app icon</title>
+  <desc id="desc">A blue Cardr C over a baseball-card shape.</desc>
+  <defs>
+    <linearGradient id="cardr-gradient" x1="74" y1="60" x2="438" y2="452" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8ed0ff"/>
+      <stop offset="1" stop-color="#7268ff"/>
+    </linearGradient>
+    <linearGradient id="cardr-sheen" x1="128" y1="104" x2="398" y2="414" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#090b16"/>
+  <rect x="94" y="74" width="324" height="364" rx="52" fill="#141b35" stroke="#40527d" stroke-width="12"/>
+  <rect x="118" y="98" width="276" height="316" rx="36" fill="url(#cardr-sheen)"/>
+  <path d="M361 176c-25-27-60-42-98-42-73 0-132 59-132 132s59 132 132 132c38 0 73-16 98-42l-34-34c-16 15-39 24-64 24-44 0-80-36-80-80s36-80 80-80c25 0 48 9 64 24z" fill="url(#cardr-gradient)"/>
+  <path d="M151 125h48" stroke="#8ed0ff" stroke-linecap="round" stroke-width="12" opacity=".82"/>
+  <circle cx="360" cy="372" r="16" fill="#63e4d4"/>
+</svg>

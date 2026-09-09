@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<meta
+    name="theme-color"
+    content="#05070b"
+>
+
+<title>Prospectr — Baseball Card Intelligence</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+/* =========================================================
+   RESET
+========================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+
+    background:
+        radial-gradient(
+            circle at 10% 0%,
+            rgba(59,130,246,.18),
+            transparent 30%
+        ),
+        radial-gradient(
+            circle at 90% 10%,
+            rgba(139,92,246,.14),
+            transparent 28%
+        ),
+        #05070b;
+
+    color: #f8fafc;
+
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+}
+
+button,
+input,
+select {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+
+/* =========================================================
+   LAYOUT
+========================================================= */
+
+.container {
+    width: min(
+        1180px,
+        calc(100% - 32px)
+    );
+
+    margin: auto;
+}
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+nav {
+    position: sticky;
+
+    top: 0;
+
+    z-index: 1000;
+
+    backdrop-filter: blur(20px);
+
+    background:
+        rgba(5,7,11,.82);
+
+    border-bottom:
+        1px solid rgba(255,255,255,.07);
+}
+
+.nav {
+    min-height: 68px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+}
+
+.logo {
+    font-size: 21px;
+
+    font-weight: 950;
+
+    letter-spacing: -1px;
+}
+
+.logo span {
+    color: #60a5fa;
+}
+
+.status {
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    color: #94a3b8;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    letter-spacing: 1px;
+}
+
+.dot {
+    width: 7px;
+
+    height: 7px;
+
+    border-radius: 50%;
+
+    background: #22c55e;
+
+    box-shadow:
+        0 0 14px #22c55e;
+}
+
+
+/* =========================================================
+   HERO
+========================================================= */
+
+.hero {
+    padding: 85px 0 50px;
+}
+
+.eyebrow {
+    margin-bottom: 17px;
+
+    color: #60a5fa;
+
+    font-size: 11px;
+
+    font-weight: 850;
+
+    text-transform: uppercase;
+
+    letter-spacing: 2px;
+}
+
+h1 {
+    margin: 0 0 23px;
+
+    font-size:
+        clamp(48px, 8vw, 84px);
+
+    line-height: .92;
+
+    letter-spacing: -5px;
+}
+
+.hero-text {
+    max-width: 650px;
+
+    color: #94a3b8;
+
+    font-size: 17px;
+
+    line-height: 1.6;
+}
+
+
+/* =========================================================
+   ANALYZER
+========================================================= */
+
+.analyzer {
+    margin-top: 38px;
+
+    padding: 25px;
+
+    border:
+        1px solid rgba(96,165,250,.18);
+
+    border-radius: 24px;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(59,130,246,.09),
+            rgba(255,255,255,.025)
+        );
+
+    box-shadow:
+        0 25px 80px rgba(0,0,0,.25);
+}
+
+.analyzer-header {
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 20px;
+
+    margin-bottom: 20px;
+}
+
+.analyzer-title {
+    font-size: 19px;
+
+    font-weight: 900;
+}
+
+.analyzer-subtitle {
+    margin-top: 4px;
+
+    color: #64748b;
+
+    font-size: 12px;
+}
+
+.currency {
+    padding: 10px 12px;
+
+    border:
+        1px solid rgba(255,255,255,.1);
+
+    border-radius: 10px;
+
+    outline: none;
+
+    background: #0b0f17;
+
+    color: white;
+}
+
+.analyzer-grid {
+    display: grid;
+
+    grid-template-columns:
+        1.4fr
+        .55fr
+        1fr
+        1fr
+        auto;
+
+    gap: 10px;
+}
+
+input {
+    width: 100%;
+
+    padding: 14px;
+
+    border:
+        1px solid rgba(255,255,255,.09);
+
+    border-radius: 12px;
+
+    outline: none;
+
+    background: #0b0f17;
+
+    color: white;
+}
+
+input::placeholder {
+    color: #475569;
+}
+
+input:focus {
+    border-color: #3b82f6;
+
+    box-shadow:
+        0 0 0 3px rgba(59,130,246,.1);
+}
+
+.analyze {
+    min-height: 49px;
+
+    padding: 0 24px;
+
+    border: 0;
+
+    border-radius: 12px;
+
+    background: white;
+
+    color: #05070b;
+
+    font-weight: 900;
+}
+
+.analyze:hover {
+    transform: translateY(-1px);
+}
+
+
+/* =========================================================
+   SCANNER
+========================================================= */
+
+.scan-area {
+    margin-top: 14px;
+
+    padding: 18px;
+
+    text-align: center;
+
+    border:
+        1px dashed rgba(96,165,250,.35);
+
+    border-radius: 16px;
+
+    background:
+        rgba(59,130,246,.04);
+}
+
+#fileInput {
+    display: none;
+}
+
+.scan-button {
+    padding: 12px 19px;
+
+    border:
+        1px solid rgba(255,255,255,.12);
+
+    border-radius: 11px;
+
+    background:
+        rgba(255,255,255,.06);
+
+    color: white;
+
+    font-weight: 800;
+}
+
+.scan-button:hover {
+    background:
+        rgba(255,255,255,.1);
+}
+
+#scanStatus {
+    margin-top: 10px;
+
+    color: #64748b;
+
+    font-size: 12px;
+}
+
+.scan-preview {
+    display: none;
+
+    max-width: 180px;
+
+    max-height: 230px;
+
+    margin: 15px auto 0;
+
+    border-radius: 12px;
+
+    object-fit: contain;
+
+    border:
+        1px solid rgba(255,255,255,.1);
+}
+
+
+/* =========================================================
+   SECTIONS
+========================================================= */
+
+.section {
+    margin-bottom: 70px;
+}
+
+.section-title {
+    font-size: 27px;
+
+    font-weight: 900;
+
+    letter-spacing: -1px;
+}
+
+.section-subtitle {
+    margin-top: 5px;
+
+    margin-bottom: 20px;
+
+    color: #64748b;
+
+    font-size: 13px;
+}
+
+
+/* =========================================================
+   METRICS
+========================================================= */
+
+.metrics {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 14px;
+}
+
+.metric {
+    padding: 21px;
+
+    border:
+        1px solid rgba(255,255,255,.07);
+
+    border-radius: 17px;
+
+    background:
+        rgba(255,255,255,.025);
+}
+
+.metric-label {
+    color: #64748b;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+}
+
+.metric-value {
+    margin-top: 10px;
+
+    font-size: 27px;
+
+    font-weight: 900;
+}
+
+
+/* =========================================================
+   SALES
+========================================================= */
+
+.sales {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 15px;
+}
+
+.sale {
+    overflow: hidden;
+
+    border:
+        1px solid rgba(255,255,255,.08);
+
+    border-radius: 17px;
+
+    background: #090c12;
+
+    transition:
+        transform .2s,
+        border-color .2s;
+}
+
+.sale:hover {
+    transform: translateY(-3px);
+
+    border-color:
+        rgba(96,165,250,.3);
+}
+
+.sale-image {
+    height: 250px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    background:
+        linear-gradient(
+            145deg,
+            #0d1118,
+            #080a0f
+        );
+
+    color: #334155;
+
+    font-size: 10px;
+
+    letter-spacing: 1px;
+}
+
+.sale-image img {
+    width: 100%;
+
+    height: 100%;
+
+    object-fit: contain;
+}
+
+.sale-info {
+    padding: 15px;
+}
+
+.sale-title {
+    min-height: 50px;
+
+    font-size: 13px;
+
+    font-weight: 750;
+
+    line-height: 1.4;
+}
+
+.sale-price {
+    margin-top: 10px;
+
+    font-size: 23px;
+
+    font-weight: 900;
+}
+
+.sale-meta {
+    margin-top: 7px;
+
+    color: #64748b;
+
+    font-size: 10px;
+}
+
+
+/* =========================================================
+   CHART
+========================================================= */
+
+.chart-box {
+    padding: 20px;
+
+    border:
+        1px solid rgba(255,255,255,.07);
+
+    border-radius: 20px;
+
+    background:
+        rgba(255,255,255,.025);
+}
+
+.chart {
+    height: 320px;
+}
+
+
+/* =========================================================
+   SCANNER MESSAGE
+========================================================= */
+
+.scanner-note {
+    max-width: 620px;
+
+    margin: 14px auto 0;
+
+    color: #475569;
+
+    font-size: 11px;
+
+    line-height: 1.5;
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media(max-width: 900px) {
+
+    .analyzer-grid {
+        grid-template-columns:
+            1fr 1fr;
+    }
+
+    .metrics {
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+
+    .sales {
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+
+}
+
+
+@media(max-width: 560px) {
+
+    .container {
+        width:
+            calc(100% - 24px);
+    }
+
+    .hero {
+        padding-top: 55px;
+    }
+
+    h1 {
+        font-size: 49px;
+
+        letter-spacing: -3px;
+    }
+
+    .hero-text {
+        font-size: 15px;
+    }
+
+    .analyzer {
+        padding: 17px;
+    }
+
+    .analyzer-header {
+        align-items: flex-start;
+
+        flex-direction: column;
+    }
+
+    .analyzer-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .analyze {
+        width: 100%;
+
+        min-height: 52px;
+    }
+
+    .metrics,
+    .sales {
+        grid-template-columns: 1fr;
+    }
+
+    .sale-image {
+        height: 320px;
+    }
+
+    .status {
+        display: none;
+    }
+
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<!-- =======================================================
+     NAV
+======================================================== -->
+
+<nav>
+
+<div class="container nav">
+
+<div class="logo">
+PROSPECTR<span>.</span>
+</div>
+
+<div class="status">
+
+<div class="dot"></div>
+
+MARKET ENGINE ONLINE
+
+</div>
+
+</div>
+
+</nav>
+
+
+<!-- =======================================================
+     MAIN
+======================================================== -->
+
+<main>
+
+
+<!-- HERO -->
+
+<section class="hero">
+
+<div class="container">
+
+<div class="eyebrow">
+Baseball Card Intelligence
+</div>
+
+
+<h1>
+Know the card.<br>
+Know the market.
+</h1>
+
+
+<p class="hero-text">
+Prospectr brings card identification, market sales,
+price trends and collector intelligence together in one
+place.
+</p>
+
+
+<!-- =====================================================
+     ANALYZER
+===================================================== -->
+
+<div class="analyzer">
+
+<div class="analyzer-header">
+
+<div>
+
+<div class="analyzer-title">
+Analyze a Card
+</div>
+
+<div class="analyzer-subtitle">
+Scan your card or enter its details manually.
+</div>
+
+</div>
+
+
+<select
+id="currency"
+class="currency"
+onchange="updateCurrency()"
+>
+
+<option value="CAD">
+🇨🇦 CAD
+</option>
+
+<option value="USD">
+🇺🇸 USD
+</option>
+
+<option value="EUR">
+🇪🇺 EUR
+</option>
+
+<option value="GBP">
+🇬🇧 GBP
+</option>
+
+<option value="AUD">
+🇦🇺 AUD
+</option>
+
+</select>
+
+</div>
+
+
+<div class="analyzer-grid">
+
+<input
+id="player"
+placeholder="Player"
+autocomplete="off"
+>
+
+<input
+id="year"
+placeholder="Year"
+type="number"
+>
+
+<input
+id="set"
+placeholder="Set"
+autocomplete="off"
+>
+
+<input
+id="parallel"
+placeholder="Parallel / Variation"
+autocomplete="off"
+>
+
+<button
+class="analyze"
+onclick="analyzeCard()"
+>
+Analyze
+</button>
+
+</div>
+
+
+<!-- SCANNER -->
+
+<div class="scan-area">
+
+<input
+id="fileInput"
+type="file"
+accept="image/jpeg,image/png,image/webp"
+capture="environment"
+onchange="scanCard()"
+>
+
+
+<button
+class="scan-button"
+onclick="
+document
+.getElementById('fileInput')
+.click()
+"
+>
+📷 Scan Card
+</button>
+
+
+<img
+id="scanPreview"
+class="scan-preview"
+alt="Card preview"
+>
+
+
+<div id="scanStatus">
+Take a clear photo of the front of your card.
+</div>
+
+
+<div class="scanner-note">
+Prospectr will receive the card photo and prepare it
+for automatic identification. You can always edit the
+detected details before analyzing.
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- =======================================================
+     MARKET PULSE
+======================================================== -->
+
+<section class="container section">
+
+<div class="section-title">
+Market Pulse
+</div>
+
+<div class="section-subtitle">
+A quick view of current Prospectr market activity.
+</div>
+
+
+<div class="metrics">
+
+
+<div class="metric">
+
+<div class="metric-label">
+Recent Sales
+</div>
+
+<div
+class="metric-value"
+id="salesCount"
+>
+—
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Latest Sale
+</div>
+
+<div
+class="metric-value"
+id="latestSale"
+>
+—
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Average Sale
+</div>
+
+<div
+class="metric-value"
+id="averageSale"
+>
+—
+</div>
+
+</div>
+
+
+<div class="metric">
+
+<div class="metric-label">
+Data Mode
+</div>
+
+<div
+class="metric-value"
+id="dataStatus"
+>
+Loading
+</div>
+
+</div>
+
+
+</div>
+
+</section>
+
+
+<!-- =======================================================
+     RECENT SALES
+======================================================== -->
+
+<section class="container section">
+
+<div class="section-title">
+Recent Sales
+</div>
+
+<div class="section-subtitle">
+Latest transactions available to Prospectr.
+</div>
+
+
+<div
+class="sales"
+id="salesGrid"
+>
+
+</div>
+
+</section>
+
+
+<!-- =======================================================
+     MARKET CHART
+======================================================== -->
+
+<section class="container section">
+
+<div class="section-title">
+Market Intelligence
+</div>
+
+<div class="section-subtitle">
+Price movement across recent transactions.
+</div>
+
+
+<div class="chart-box">
+
+<div class="chart">
+
+<canvas id="marketChart"></canvas>
+
+</div>
+
+</div>
+
+</section>
+
+
+</main>
+
+
+<script>
+
+/* =========================================================
+   STATE
+========================================================= */
+
+let sales = [];
+
+let currentCurrency = "CAD";
+
+let marketChart = null;
+
+
+/* =========================================================
+   DEMO FX RATES
+========================================================= */
+
+const rates = {
+
+    CAD: 1,
+
+    USD: 0.73,
+
+    EUR: 0.62,
+
+    GBP: 0.54,
+
+    AUD: 1.10
+
+};
+
+
+/* =========================================================
+   MONEY FORMATTER
+========================================================= */
+
+function money(value) {
+
+    if (
+        value === null ||
+        value === undefined ||
+        isNaN(value)
+    ) {
+        return "—";
+    }
+
+
+    const converted =
+        Number(value) *
+        rates[currentCurrency];
+
+
+    return new Intl.NumberFormat(
+        undefined,
+        {
+            style: "currency",
+
+            currency: currentCurrency,
+
+            minimumFractionDigits: 2,
+
+            maximumFractionDigits: 2
+        }
+    ).format(converted);
+
+}
+
+
+/* =========================================================
+   CURRENCY
+========================================================= */
+
+function updateCurrency() {
+
+    currentCurrency =
+        document
+            .getElementById("currency")
+            .value;
+
+
+    localStorage.setItem(
+        "prospectr_currency",
+        currentCurrency
+    );
+
+
+    updateMetrics();
+
+    renderSales();
+
+    drawChart();
+
+}
+
+
+/* =========================================================
+   METRICS
+========================================================= */
+
+function updateMetrics() {
+
+    document
+        .getElementById("salesCount")
+        .textContent =
+        sales.length;
+
+
+    if (!sales.length) {
+
+        document
+            .getElementById("latestSale")
+            .textContent =
+            "—";
+
+        document
+            .getElementById("averageSale")
+            .textContent =
+            "—";
+
+        return;
+
+    }
+
+
+    const prices =
+        sales
+            .map(
+                sale =>
+                    Number(
+                        sale.price_cad
+                    )
+            )
+            .filter(
+                price =>
+                    !isNaN(price)
+            );
+
+
+    const average =
+        prices.reduce(
+            (a,b) => a + b,
+            0
+        ) /
+        prices.length;
+
+
+    document
+        .getElementById("latestSale")
+        .textContent =
+        money(
+            sales[0].price_cad
+        );
+
+
+    document
+        .getElementById("averageSale")
+        .textContent =
+        money(average);
+
+
+    document
+        .getElementById("dataStatus")
+        .textContent =
+        "Demo";
+
+}
+
+
+/* =========================================================
+   SALES CARDS
+========================================================= */
+
+function renderSales() {
+
+    const grid =
+        document
+            .getElementById(
+                "salesGrid"
+            );
+
+
+    if (!sales.length) {
+
+        grid.innerHTML = `
+            <div
+                style="
+                    color:#64748b;
+                    padding:20px;
+                "
+            >
+                No market sales available yet.
+            </div>
+        `;
+
+        return;
+
+    }
+
+
+    grid.innerHTML =
+        sales
+            .map(
+                sale => `
+
+                <article class="sale">
+
+                    <div class="sale-image">
+
+                        ${
+                            sale.image_url
+                            ?
+                            `
+                            <img
+                                src="${escapeHtml(
+                                    sale.image_url
+                                )}"
+                                alt="Baseball card"
+                            >
+                            `
+                            :
+                            "CARD IMAGE"
+                        }
+
+                    </div>
+
+
+                    <div class="sale-info">
+
+                        <div class="sale-title">
+
+                            ${escapeHtml(
+                                sale.title
+                            )}
+
+                        </div>
+
+
+                        <div class="sale-price">
+
+                            ${money(
+                                sale.price_cad
+                            )}
+
+                        </div>
+
+
+                        <div class="sale-meta">
+
+                            ${escapeHtml(
+                                sale.platform
+                            )}
+
+                            ·
+
+                            ${escapeHtml(
+                                sale.sale_date
+                            )}
+
+                        </div>
+
+                    </div>
+
+                </article>
+
+                `
+            )
+            .join("");
+
+}
+
+
+/* =========================================================
+   ESCAPE HTML
+========================================================= */
+
+function escapeHtml(value) {
+
+    return String(value || "")
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+
+}
+
+
+/* =========================================================
+   MARKET CHART
+========================================================= */
+
+function drawChart() {
+
+    const canvas =
+        document
+            .getElementById(
+                "marketChart"
+            );
+
+
+    if (marketChart) {
+
+        marketChart.destroy();
+
+    }
+
+
+    const orderedSales =
+        [...sales].reverse();
+
+
+    marketChart =
+        new Chart(
+            canvas,
+            {
+
+                type: "line",
+
+                data: {
+
+                    labels:
+                        orderedSales.map(
+                            sale =>
+                                sale.sale_date
+                        ),
+
+                    datasets: [
+
+                        {
+
+                            label:
+                                "Sale Price",
+
+                            data:
+                                orderedSales.map(
+                                    sale =>
+                                        Number(
+                                            sale.price_cad
+                                        ) *
+                                        rates[
+                                            currentCurrency
+                                        ]
+                                ),
+
+                            tension: .35,
+
+                            borderWidth: 2,
+
+                            pointRadius: 4
+
+                        }
+
+                    ]
+
+                },
+
+                options: {
+
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    plugins: {
+
+                        legend: {
+
+                            display: false
+
+                        }
+
+                    },
+
+                    scales: {
+
+                        y: {
+
+                            beginAtZero: true
+
+                        }
+
+                    }
+
+                }
+
+            }
+        );
+
+}
+
+
+/* =========================================================
+   LOAD MARKET DATA
+========================================================= */
+
+async function loadMarket() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/recent-sales?limit=12"
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Market request failed"
+            );
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        sales =
+            data.sales || [];
+
+
+        updateMetrics();
+
+        renderSales();
+
+        drawChart();
+
+
+    } catch(error) {
+
+        console.error(error);
+
+
+        document
+            .getElementById(
+                "dataStatus"
+            )
+            .textContent =
+            "Offline";
+
+    }
+
+}
+
+
+/* =========================================================
+   ANALYZE CARD
+========================================================= */
+
+function analyzeCard() {
+
+    const player =
+        document
+            .getElementById(
+                "player"
+            )
+            .value
+            .trim();
+
+
+    const year =
+        document
+            .getElementById(
+                "year"
+            )
+            .value
+            .trim();
+
+
+    const set =
+        document
+            .getElementById(
+                "set"
+            )
+            .value
+            .trim();
+
+
+    const parallel =
+        document
+            .getElementById(
+                "parallel"
+            )
+            .value
+            .trim();
+
+
+    if (!player) {
+
+        alert(
+            "Enter the player name."
+        );
+
+        return;
+
+    }
+
+
+    if (!year) {
+
+        alert(
+            "Enter the card year."
+        );
+
+        return;
+
+    }
+
+
+    if (!set) {
+
+        alert(
+            "Enter the card set."
+        );
+
+        return;
+
+    }
+
+
+    const params =
+        new URLSearchParams({
+
+            player: player,
+
+            year: year,
+
+            set_name: set,
+
+            parallel: parallel,
+
+            card_type: "Base",
+
+            grade: "Raw"
+
+        });
+
+
+    window.location.href =
+        "/card?" +
+        params.toString();
+
+}
+
+
+/* =========================================================
+   CARD SCANNER
+========================================================= */
+
+async function scanCard() {
+
+    const input =
+        document
+            .getElementById(
+                "fileInput"
+            );
+
+
+    if (
+        !input.files ||
+        !input.files[0]
+    ) {
+
+        return;
+
+    }
+
+
+    const file =
+        input.files[0];
+
+
+    const status =
+        document
+            .getElementById(
+                "scanStatus"
+            );
+
+
+    const preview =
+        document
+            .getElementById(
+                "scanPreview"
+            );
+
+
+    /* -----------------------------------------------------
+       Preview image
+    ----------------------------------------------------- */
+
+    preview.src =
+        URL.createObjectURL(file);
+
+    preview.style.display =
+        "block";
+
+
+    status.textContent =
+        "Uploading card photo...";
+
+
+    /* -----------------------------------------------------
+       Upload
+    ----------------------------------------------------- */
+
+    const formData =
+        new FormData();
+
+
+    formData.append(
+        "image",
+        file
+    );
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/scan",
+                {
+                    method: "POST",
+
+                    body: formData
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!data.success) {
+
+            throw new Error(
+                data.error ||
+                "Scan failed."
+            );
+
+        }
+
+
+        status.textContent =
+            "Card photo received. Identification ready for the next engine upgrade.";
+
+
+        /* -------------------------------------------------
+           Fill anything returned by scanner
+        ------------------------------------------------- */
+
+        if (
+            data.identification
+        ) {
+
+            document
+                .getElementById(
+                    "player"
+                )
+                .value =
+                data.identification.player ||
+                "";
+
+            document
+                .getElementById(
+                    "year"
+                )
+                .value =
+                data.identification.year ||
+                "";
+
+            document
+                .getElementById(
+                    "set"
+                )
+                .value =
+                data.identification.set ||
+                "";
+
+            document
+                .getElementById(
+                    "parallel"
+                )
+                .value =
+                data.identification.parallel ||
+                "";
+
+        }
+
+
+    } catch(error) {
+
+        console.error(error);
+
+
+        status.textContent =
+            error.message ||
+            "Could not upload card.";
+
+    }
+
+}
+
+
+/* =========================================================
+   RESTORE CURRENCY
+========================================================= */
+
+const savedCurrency =
+    localStorage.getItem(
+        "prospectr_currency"
+    );
+
+
+if (
+    savedCurrency &&
+    rates[savedCurrency]
+) {
+
+    currentCurrency =
+        savedCurrency;
+
+
+    document
+        .getElementById(
+            "currency"
+        )
+        .value =
+        savedCurrency;
+
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+loadMarket();
+
+</script>
+
+
+</body>
+
+</html>
