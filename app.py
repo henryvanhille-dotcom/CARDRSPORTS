@@ -352,7 +352,11 @@ async def service_worker() -> FileResponse:
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("app.html", {"request": request})
+  return templates.TemplateResponse(
+    request=request,
+    name="app.html",
+    context={}
+)
 
 
 @app.get("/privacy", response_class=HTMLResponse)
