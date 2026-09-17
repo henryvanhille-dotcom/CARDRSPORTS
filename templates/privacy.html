@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" href="/static/icons/cardr-icon.svg" type="image/svg+xml">
+  <title>Privacy Notice — CARDR</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1220; --raised:#101b2d; --surface:#142239; --soft:rgba(148,163,184,.09); --line:rgba(203,213,225,.14); --line-strong:rgba(203,213,225,.27); --text:#f7f9fd; --muted:#9aa9c1; --quiet:#71829c; --blue:#75baff; --blue-ink:#07111d; --gold:#f4c976; --shadow:0 18px 46px rgba(0,0,0,.22); }
+    * { box-sizing:border-box; }
+    html { background:var(--bg); scroll-behavior:smooth; }
+    body { min-width:320px; margin:0; color:var(--text); background:radial-gradient(56rem 34rem at 12% -12%,rgba(71,139,255,.18),transparent 62%),radial-gradient(45rem 30rem at 104% 12%,rgba(112,77,255,.12),transparent 64%),var(--bg); font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.6; }
+    a { color:var(--blue); }
+    a:focus-visible { outline:3px solid rgba(117,186,255,.45); outline-offset:3px; }
+    .shell { width:min(960px,calc(100% - 28px)); margin:0 auto; padding-bottom:56px; }
+    .topbar { position:sticky; z-index:5; top:10px; display:flex; align-items:center; justify-content:space-between; gap:14px; margin:10px 0 28px; border:1px solid var(--line-strong); border-radius:16px; padding:11px 14px; background:color-mix(in srgb,var(--bg) 82%,transparent); box-shadow:0 14px 38px rgba(0,0,0,.13); backdrop-filter:blur(16px); }
+    .brand { display:inline-flex; align-items:center; gap:9px; color:var(--text); font-size:17px; font-weight:950; letter-spacing:1.7px; text-decoration:none; }
+    .brand-mark { display:grid; width:29px; height:29px; place-items:center; border-radius:9px; color:var(--blue-ink); background:var(--blue); font-size:14px; letter-spacing:0; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 12%,transparent); }
+    .back { border:1px solid var(--line); border-radius:10px; padding:7px 10px; color:var(--text); background:var(--surface); font-size:12px; font-weight:800; text-decoration:none; }
+    .back:hover { border-color:color-mix(in srgb,var(--blue) 50%,var(--line)); color:var(--blue); }
+    .hero { position:relative; overflow:hidden; padding:clamp(25px,5vw,48px); border:1px solid color-mix(in srgb,var(--blue) 27%,var(--line)); border-radius:24px; background:linear-gradient(125deg,color-mix(in srgb,var(--surface) 90%,#102a58),color-mix(in srgb,var(--surface) 91%,#29195d)); box-shadow:0 24px 58px rgba(3,9,22,.24); }
+    .hero::after { position:absolute; top:-45%; right:-10%; width:30rem; height:23rem; border-radius:50%; background:radial-gradient(ellipse,color-mix(in srgb,var(--blue) 24%,transparent),transparent 66%); content:""; pointer-events:none; }
+    .eyebrow { position:relative; z-index:1; color:var(--blue); font-size:10px; font-weight:900; letter-spacing:1.4px; text-transform:uppercase; }
+    h1 { position:relative; z-index:1; max-width:700px; margin:7px 0 8px; font-size:clamp(34px,7vw,58px); line-height:1.04; letter-spacing:-1.9px; }
+    .lede { position:relative; z-index:1; max-width:690px; margin:0; color:var(--muted); font-size:15px; }
+    .updated { position:relative; z-index:1; display:inline-flex; margin-top:18px; border:1px solid color-mix(in srgb,var(--blue) 32%,var(--line)); border-radius:999px; padding:5px 8px; color:var(--text); background:color-mix(in srgb,var(--blue) 9%,transparent); font-size:11px; font-weight:780; }
+    .content { display:grid; grid-template-columns:220px minmax(0,1fr); gap:28px; margin-top:29px; }
+    .toc { position:sticky; top:85px; align-self:start; border:1px solid var(--line); border-radius:17px; padding:12px; background:color-mix(in srgb,var(--surface) 94%,transparent); }
+    .toc strong { display:block; margin:2px 7px 8px; color:var(--muted); font-size:10px; letter-spacing:.9px; text-transform:uppercase; }
+    .toc a { display:block; border-radius:9px; padding:6px 7px; color:var(--muted); font-size:12px; font-weight:720; text-decoration:none; }
+    .toc a:hover { color:var(--text); background:var(--soft); }
+    .article { min-width:0; }
+    section { margin:0 0 14px; border:1px solid var(--line); border-radius:18px; padding:clamp(18px,3vw,27px); background:var(--surface); box-shadow:var(--shadow); }
+    h2 { margin:0 0 9px; font-size:20px; line-height:1.25; letter-spacing:-.4px; }
+    h3 { margin:18px 0 4px; font-size:14px; }
+    p, li { color:var(--muted); font-size:14px; }
+    p { margin:0 0 11px; }
+    p:last-child { margin-bottom:0; }
+    ul { margin:8px 0 4px; padding-left:20px; }
+    li { margin:6px 0; }
+    .callout { border-color:color-mix(in srgb,var(--gold) 42%,var(--line)); background:color-mix(in srgb,var(--gold) 7%,var(--surface)); }
+    .callout h2 { color:var(--gold); }
+    .contact { border-color:color-mix(in srgb,var(--blue) 35%,var(--line)); background:linear-gradient(135deg,color-mix(in srgb,var(--blue) 10%,var(--surface)),var(--surface)); }
+    .contact p { color:var(--text); }
+    footer { padding:11px 4px 0; color:var(--quiet); font-size:11px; text-align:center; }
+    @media (max-width:720px) { .content { grid-template-columns:1fr; gap:14px; } .toc { position:static; display:flex; flex-wrap:wrap; gap:2px; } .toc strong { width:100%; } .toc a { font-size:11px; } }
+    @media (max-width:420px) { .shell { width:min(100% - 20px,960px); } .topbar { top:7px; margin-top:7px; } .brand { font-size:15px; } .hero { border-radius:19px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <nav class="topbar" aria-label="Legal navigation">
+      <a class="brand" href="/" aria-label="CARDR home"><span class="brand-mark">C</span>CARDR<span style="color:var(--blue)">.</span></a>
+      <a class="back" href="/">← Back to CARDR</a>
+    </nav>
+
+    <header class="hero">
+      <div class="eyebrow">CARDR · Built in Canada</div>
+      <h1>Your collection is yours.</h1>
+      <p class="lede">This Privacy Notice explains the information CARDR collects, why we use it, and the choices you have when you use your Vault, Watchlist, Prospectr, and account.</p>
+      <span class="updated">Last updated: September 14, 2026</span>
+    </header>
+
+    <div class="content">
+      <nav class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <a href="#scope">Scope</a>
+        <a href="#collect">What we collect</a>
+        <a href="#use">How we use it</a>
+        <a href="#share">Sharing &amp; storage</a>
+        <a href="#choices">Your choices</a>
+        <a href="#cookies">Cookies</a>
+        <a href="#security">Security &amp; retention</a>
+        <a href="#contact">Contact CARDR</a>
+      </nav>
+
+      <article class="article">
+        <section id="scope">
+          <h2>1. Scope</h2>
+          <p>This Notice applies to CARDR’s website, app, and related services (together, “CARDR”). It applies when you browse CARDR, create an account, add cards to a Vault or Watchlist, upload a card image, request a Prospectr estimate, or contact us.</p>
+          <p>CARDR is a Canadian card-collection product. We will update this Notice when our product or data practices materially change, and will post the revised date at the top of this page.</p>
+        </section>
+
+        <section id="collect">
+          <h2>2. What we collect</h2>
+          <h3>Information you provide</h3>
+          <ul>
+            <li><strong>Account information:</strong> your email address, display name, hashed password credential, and account preferences.</li>
+            <li><strong>Collection information:</strong> the card details, purchase notes, cost basis, value preferences, and other information you add to your Vault or Watchlist.</li>
+            <li><strong>Card images:</strong> images you choose to upload. A card photo is optional; CARDR does not represent that an uploaded image is automatically or perfectly identified.</li>
+            <li><strong>Messages and requests:</strong> the contents of support, privacy, export, or deletion requests you send us.</li>
+          </ul>
+          <h3>Information created through use</h3>
+          <ul>
+            <li><strong>Session and technical information:</strong> a session cookie or similar account token, browser and device information, timestamps, error logs, and security events needed to operate and protect CARDR.</li>
+            <li><strong>Feature activity:</strong> actions such as an analysis or refresh request, so we can apply product limits, prevent misuse, and diagnose service issues.</li>
+            <li><strong>Market evidence:</strong> completed-sale data and source information CARDR stores or receives from market-data providers. This is market information, not necessarily personal information about you.</li>
+          </ul>
+        </section>
+
+        <section id="use">
+          <h2>3. How we use information</h2>
+          <p>We use the information above to operate CARDR: to create and secure your account, keep your Vault and Watchlist available, display your collection, prepare an estimate you request, support you, improve reliability, and protect the service from abuse.</p>
+          <p>CARDR may use card details and market evidence to calculate a Prospectr estimate or to show market context. We do not present a prediction as a completed sale. Estimates may rely on direct observed sales, related-card signals, broad market signals, or an unanchored fallback, and CARDR labels lower-confidence results accordingly.</p>
+          <p>We may use aggregate, de-identified service information to understand feature usage and improve CARDR. We do not intentionally publish your private Vault, Watchlist, cost basis, notes, or uploaded images to other collectors without an action from you that clearly makes content public.</p>
+        </section>
+
+        <section class="callout" aria-label="Important market-data notice">
+          <h2>Market data &amp; predictions</h2>
+          <p>Completed-sale records can be incomplete, delayed, old, incorrectly listed, or unavailable. CARDR’s prices, charts, scores, and Prospectr estimates are informational tools—not appraisals, purchase offers, auction reserves, investment advice, or guarantees of what a card will sell for. Use your own judgment before buying, selling, grading, insuring, or otherwise relying on a value.</p>
+        </section>
+
+        <section id="share">
+          <h2>4. Sharing, service providers, and storage</h2>
+          <p>CARDR uses service providers that help us host the app, store data, deliver security and support functions, and obtain market information. Those providers may process information only as needed to provide their services to CARDR and subject to their own terms and safeguards.</p>
+          <p>We may disclose information if reasonably necessary to comply with law, enforce our Terms, investigate security or fraud concerns, or protect CARDR, collectors, and the public. If CARDR is involved in a merger, acquisition, financing, or sale of assets, information may be transferred as part of that transaction, subject to applicable law.</p>
+          <p>CARDR may use providers that process data outside your province, territory, or Canada. Those locations may have different privacy laws. We take reasonable steps to select providers and safeguards appropriate to the service, but no transfer or storage system is risk-free.</p>
+        </section>
+
+        <section id="choices">
+          <h2>5. Your choices and requests</h2>
+          <p>You can review and update information you have entered through CARDR where the feature is available. You can also ask for access to, correction of, export of, or deletion of personal information associated with your account.</p>
+          <p>To make a request, email <a href="mailto:privacy@cardrsports.com">privacy@cardrsports.com</a> from the email address associated with your account and describe what you need. We may ask for enough information to verify that the request is yours before acting on it. We will respond within a reasonable time and explain if we must retain limited information for legal, security, fraud-prevention, or backup purposes.</p>
+          <p>If you consent to optional product updates or marketing messages, you can withdraw that consent using the opt-out method in the message or by contacting us. Withdrawing consent does not affect processing that occurred before withdrawal or essential service messages about your account.</p>
+        </section>
+
+        <section id="cookies">
+          <h2>6. Cookies and similar technology</h2>
+          <p>CARDR uses essential session cookies or similar tokens so you can stay signed in and so we can protect your account. We may also store local preferences, such as a display theme or currency selection, on your device. These are used to make the product work and remember choices you make.</p>
+          <p>You can control cookies through your browser settings, but blocking essential cookies may prevent account features from working. If CARDR adds optional analytics or advertising cookies, we will describe the choice and controls before using them where required.</p>
+        </section>
+
+        <section id="security">
+          <h2>7. Security, retention, and children</h2>
+          <p>We use reasonable administrative, technical, and organizational measures designed to protect CARDR information. No online system can promise absolute security, so please use a strong, unique password and let us know promptly if you believe your account has been compromised.</p>
+          <p>We keep information for as long as reasonably needed to provide CARDR, meet our legal and security responsibilities, resolve disputes, and maintain reliable backups. When information is no longer needed, we will delete, de-identify, or securely isolate it in accordance with our retention practices.</p>
+          <p>CARDR is not directed to children. Do not create an account or send personal information if you are below the age at which you can consent to use online services in your location without a parent or guardian’s permission. If you believe a child has provided personal information to CARDR, contact us so we can review the request.</p>
+        </section>
+
+        <section id="contact" class="contact">
+          <h2>8. Contact CARDR</h2>
+          <p>Questions, concerns, or privacy requests? Reach us at <a href="mailto:privacy@cardrsports.com">privacy@cardrsports.com</a>.</p>
+          <p>We welcome questions in plain language. If you are concerned about how we handled a privacy request, tell us what happened and how to reach you so we can investigate.</p>
+        </section>
+      </article>
+    </div>
+    <footer>© 2026 CARDR · <a href="/terms">Terms of Use</a> · <a href="/">Return to CARDR</a></footer>
+  </main>
+</body>
+</html>

@@ -11,3 +11,7 @@ __pycache__/
 
 player_cache/
 cardr_project_code.txt
+
+cloudflared
+cloudflared.tgz
+.DS_Store

@@ -80,6 +80,48 @@ def _card_number_from_title(title: object) -> str:
     return match.group(1).upper().replace(" ", "") if match else ""
 
 
+def _legacy_identity_is_consistent(row: sqlite3.Row) -> bool:
+    """Reject a legacy query-labelled row when its title contradicts it.
+
+    Older refreshes saved the search query's set/type on every returned
+    listing.  These light checks prevent clearly conflicting records from
+    polluting a value while retaining listings whose source identity is now
+    stored natively.
+    """
+    if clean_display(row["identity_status"]) == "source_native":
+        return True
+    title = normalize_text(row["title"])
+    if not title:
+        return False
+
+    player_tokens = normalize_text(row["player"]).split()
+    if player_tokens and not all(token in title for token in player_tokens):
+        return False
+
+    year = normalize_text(row["year"])
+    if year and year not in title:
+        return False
+
+    generic_set_terms = {"topps", "bowman", "panini", "upper", "deck", "donruss"}
+    set_tokens = [
+        token
+        for token in normalize_text(row["set_name"]).split()
+        if token not in generic_set_terms and len(token) > 2
+    ]
+    if set_tokens and not all(token in title for token in set_tokens):
+        return False
+
+    card_type = normalize_text(row["card_type"])
+    if card_type in {"base", "base card", "standard"}:
+        if any(term in title for term in ("auto", "autograph", "signed", "signature")):
+            return False
+
+    parallel_tokens = normalize_text(row["parallel"]).split()
+    if parallel_tokens and not all(token in title for token in parallel_tokens):
+        return False
+    return True
+
+
 def _first(row: Dict[str, object], names: Iterable[str]) -> str:
     normalized = {normalize_text(key): value for key, value in row.items()}
     for name in names:
@@ -200,8 +242,8 @@ class SalesRepository:
                     """
                     SELECT id, title, sale_date, price_cad, price_usd, currency,
                            platform, listing_url, image_url, thumbnail_url,
-                           player, year, set_name, card_type, parallel, grade,
-                           price_confirmed, match_confidence
+                           player, year, set_name, card_type, card_number, parallel, grade,
+                           price_confirmed, match_confidence, identity_status
                     FROM sales
                     WHERE COALESCE(match_confidence, 'unknown') != 'rejected'
                     """
@@ -211,6 +253,8 @@ class SalesRepository:
 
         sales: List[Sale] = []
         for row in rows:
+            if not _legacy_identity_is_consistent(row):
+                continue
             platform = clean_display(row["platform"])
             # Legacy records with no platform may exist, but a rejected record
             # or an explicitly unconfirmed price can never be used.
@@ -230,7 +274,7 @@ class SalesRepository:
                     year=clean_display(row["year"]),
                     set_name=clean_display(row["set_name"]),
                     card_type=clean_display(row["card_type"]),
-                    card_number=_card_number_from_title(row["title"]),
+                    card_number=clean_display(row["card_number"]) or _card_number_from_title(row["title"]),
                     parallel=clean_display(row["parallel"]),
                     grade=(
                         _grade_from_title(row["title"])
@@ -277,14 +321,22 @@ class SalesRepository:
         return sorted(sales, key=lambda sale: sale.sale_date or date.min, reverse=True)
 
     def recent_sales(self, limit: int = 12) -> List[Sale]:
-        return self.all_observed_sales()[: max(1, min(limit, 100))]
+        # This is a legacy method name.  It returns the newest slice from the
+        # full all-time observed record; the higher cap supports the Market
+        # evidence browser without silently hiding historical transactions.
+        return self.all_observed_sales()[: max(1, min(limit, 5_000))]
 
     def source_summary(self) -> Dict[str, object]:
         sales = self.all_observed_sales()
+        dated_sales = [sale.sale_date for sale in sales if sale.sale_date]
         return {
             "stored_sales_count": len(sales),
+            "all_time_sales_count": len(sales),
+            "oldest_sale_date": min(dated_sales).isoformat() if dated_sales else None,
+            "newest_sale_date": max(dated_sales).isoformat() if dated_sales else None,
             "sources": sorted({sale.platform for sale in sales if sale.platform}),
             "sample_rows_excluded": self._sample_row_count(),
+            "scope": "all_time_observed_completed_sales",
         }
 
     def _sample_row_count(self) -> int:

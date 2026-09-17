@@ -6,7 +6,12 @@ from typing import Optional
 
 
 BASE_URL = "https://thecardapi.com/api/v1/market"
-USD_TO_CAD = 1.38
+# Store the source currency and conversion rate alongside every import.  The
+# display layer may use a current preference, but historical provenance should
+# never silently overwrite the rate used at import time.
+USD_TO_CAD = 1.36
+MAX_PROVIDER_PAGE_SIZE = 1000
+DEFAULT_IMPORT_PAGE_LIMIT = 10
 
 
 # ============================================================
@@ -121,6 +126,13 @@ def detect_numbering(title):
     return None
 
 
+def detect_card_number(title):
+    """Extract a listing's card number without confusing serial numbering."""
+    text = str(title or "")
+    match = re.search(r"#\s*([A-Z]{0,5}(?:[- ]?[A-Z])?[- ]?\d{1,5}[A-Z]?)\b", text, re.I)
+    return match.group(1).upper().replace(" ", "") if match else None
+
+
 def detect_rookie(title):
     text = normalize_text(title)
 
@@ -191,11 +203,8 @@ def is_raw_sale(sale):
 # API
 # ============================================================
 
-def _request_sales(
-    query,
-    limit=50,
-    graded=None,
-):
+def _request_sales_page(query, limit=MAX_PROVIDER_PAGE_SIZE, cursor=None, graded=None):
+    """Fetch one provider page and preserve its cursor metadata."""
 
     api_key = os.getenv("CARD_API_KEY")
 
@@ -206,8 +215,10 @@ def _request_sales(
 
     params = {
         "q": query,
-        "limit": limit,
+        "limit": max(1, min(int(limit), MAX_PROVIDER_PAGE_SIZE)),
     }
+    if cursor:
+        params["cursor"] = cursor
 
     headers = {
         "x-market-api-key": api_key,
@@ -221,27 +232,23 @@ def _request_sales(
         timeout=20,
     )
 
-    print(
-        "API STATUS:",
-        response.status_code
-    )
-
     response.raise_for_status()
 
     data = response.json()
 
     if isinstance(data, dict):
-        return (
-            data.get("data")
-            or data.get("sales")
-            or data.get("results")
-            or []
-        )
-
+        records = data.get("data") or data.get("sales") or data.get("results") or []
+        pagination = data.get("pagination") or {}
+        return records, pagination.get("next_cursor"), pagination, data.get("meta") or {}
     if isinstance(data, list):
-        return data
+        return data, None, {}, {}
+    return [], None, {}, {}
 
-    return []
+
+def _request_sales(query, limit=50, graded=None):
+    """Backward-compatible one-page provider request."""
+    records, _, _, _ = _request_sales_page(query=query, limit=limit, graded=graded)
+    return records
 
 
 # ============================================================
@@ -310,8 +317,16 @@ def normalize_sale(sale):
             ).encode()
         ).hexdigest()[:24]
 
+    source_player = sale.get("player") or sale.get("player_name") or ""
+    source_set_name = sale.get("card_set") or sale.get("set_name") or sale.get("parent_set_name") or ""
+    source_year = sale.get("year") or sale.get("card_year") or ""
+    source_card_type = sale.get("card_type") or sale.get("subset") or ""
+    source_card_number = sale.get("card_number") or detect_card_number(title)
+    source_parallel = sale.get("parallel") or sale.get("variant") or detect_parallel(title)
+
     return {
         "id": str(sale_id),
+        "source_sale_id": str(sale.get("id") or sale_id),
 
         "title": title,
 
@@ -334,6 +349,8 @@ def normalize_sale(sale):
         "price_original": price,
 
         "currency": currency,
+        "source_currency": currency,
+        "fx_rate_to_cad": 1.0 if currency == "CAD" else USD_TO_CAD,
 
         "price_usd": price_usd,
 
@@ -372,6 +389,16 @@ def normalize_sale(sale):
             if grade is not None
             else None
         ),
+
+        # Keep provider-native identity when it is available.  The importer
+        # uses it rather than overwriting all rows with the search query.
+        "source_player": str(source_player).strip(),
+        "source_year": str(source_year).strip(),
+        "source_set_name": str(source_set_name).strip(),
+        "source_card_type": str(source_card_type).strip(),
+        "card_number": str(source_card_number).strip() if source_card_number else None,
+        "source_parallel": str(source_parallel).strip() if source_parallel else "",
+        "identity_status": "source_native" if any((source_player, source_set_name, source_card_number)) else "query_verified",
 
         "grader": sale.get(
             "grader"
@@ -417,11 +444,13 @@ def search_real_sales(
     query,
     limit=50,
     graded=None,
+    cursor=None,
 ):
 
-    raw_sales = _request_sales(
+    raw_sales, _, _, _ = _request_sales_page(
         query=query,
         limit=limit,
+        cursor=cursor,
         graded=graded,
     )
 
@@ -836,6 +865,16 @@ def grade_match(
     return True
 
 
+def card_number_match(card_number, sale):
+    """Require an explicit listing number to agree when the user supplied one."""
+    requested = normalize_text(card_number or "").replace(" ", "")
+    if not requested:
+        return True
+    observed = normalize_text(sale.get("card_number") or detect_card_number(sale.get("title", ""))).replace(" ", "")
+    # A number omitted from the listing is too ambiguous for a strict refresh.
+    return bool(observed and observed == requested)
+
+
 # ============================================================
 # BAD LISTINGS
 # ============================================================
@@ -879,6 +918,7 @@ def score_sale(
     card_type,
     parallel,
     grade,
+    card_number=None,
 ):
 
     title = sale.get(
@@ -908,6 +948,9 @@ def score_sale(
         parallel=parallel,
     ):
         return -1, "wrong set/product"
+
+    if not card_number_match(card_number, sale):
+        return -1, "wrong or missing card number"
 
     # Card type.
     if not card_type_match(
@@ -965,6 +1008,10 @@ def score_sale(
             "grade"
         )
 
+    if card_number:
+        score += 20
+        reasons.append("card number")
+
     if sale.get(
         "image_url"
     ):
@@ -992,8 +1039,25 @@ def search_card_sales(
     card_type="Base",
     parallel=None,
     grade=None,
-    days=3,
+    card_number=None,
+    days=None,
+    max_pages=None,
+    page_limit=MAX_PROVIDER_PAGE_SIZE,
 ):
+    """Search every available provider page up to a controlled import cap.
+
+    Provider cursor pagination is used instead of a fixed 50-sale snapshot.
+    A host can raise ``CARDR_MARKET_IMPORT_MAX_PAGES`` for a long-running
+    historical backfill.  The return value reports when a continuation is
+    needed; it never pretends a capped response is all history.
+    """
+    if max_pages is None:
+        try:
+            max_pages = int(os.getenv("CARDR_MARKET_IMPORT_MAX_PAGES", str(DEFAULT_IMPORT_PAGE_LIMIT)))
+        except ValueError:
+            max_pages = DEFAULT_IMPORT_PAGE_LIMIT
+    max_pages = max(1, min(int(max_pages), 100))
+    page_limit = max(1, min(int(page_limit), MAX_PROVIDER_PAGE_SIZE))
 
     queries = []
 
@@ -1002,6 +1066,7 @@ def search_card_sales(
         player,
         str(year) if year else "",
         set_name,
+        card_number or "",
         parallel or "",
     ]
 
@@ -1039,6 +1104,10 @@ def search_card_sales(
             )
 
     all_sales = {}
+    pages_scanned = 0
+    provider_total = 0
+    coverage = []
+    needs_continuation = False
 
     for level, query in enumerate(
         unique_queries,
@@ -1047,76 +1116,88 @@ def search_card_sales(
 
         try:
 
-            raw_results = search_real_sales(
-                query=query,
-                limit=50,
-            )
-
-            print(
-                f"Prospectr search "
-                f"level {level}: "
-                f"{query} -> "
-                f"{len(raw_results)} results"
-            )
-
-            for sale in raw_results:
-
-                score, reason = score_sale(
-                    sale=sale,
-                    player=player,
-                    year=year,
-                    set_name=set_name,
-                    card_type=card_type,
-                    parallel=parallel,
-                    grade=grade,
+            cursor = None
+            for page_number in range(1, max_pages + 1):
+                raw_results, next_cursor, pagination, meta = _request_sales_page(
+                    query=query,
+                    limit=page_limit,
+                    cursor=cursor,
                 )
+                pages_scanned += 1
+                provider_total = max(provider_total, int(pagination.get("total") or 0))
+                if meta.get("coverage_date_from") or meta.get("coverage_date_to"):
+                    coverage.append({
+                        "from": meta.get("coverage_date_from"),
+                        "to": meta.get("coverage_date_to"),
+                    })
 
-                if score < 0:
-                    continue
+                for sale in raw_results:
 
-                sale[
-                    "match_score"
-                ] = score
-
-                sale[
-                    "match_reason"
-                ] = reason
-
-                if score >= 90:
-                    sale[
-                        "match_confidence"
-                    ] = "high"
-
-                elif score >= 70:
-                    sale[
-                        "match_confidence"
-                    ] = "medium"
-
-                else:
-                    sale[
-                        "match_confidence"
-                    ] = "low"
-
-                sale_id = sale[
-                    "id"
-                ]
-
-                existing = all_sales.get(
-                    sale_id
-                )
-
-                if (
-                    existing is None
-                    or score >
-                    existing.get(
-                        "match_score",
-                        0
+                    score, reason = score_sale(
+                        sale=sale,
+                        player=player,
+                        year=year,
+                        set_name=set_name,
+                        card_type=card_type,
+                        parallel=parallel,
+                        grade=grade,
+                        card_number=card_number,
                     )
-                ):
 
-                    all_sales[
+                    if score < 0:
+                        continue
+
+                    sale[
+                        "match_score"
+                    ] = score
+
+                    sale[
+                        "match_reason"
+                    ] = reason
+
+                    if score >= 90:
+                        sale[
+                            "match_confidence"
+                        ] = "high"
+
+                    elif score >= 70:
+                        sale[
+                            "match_confidence"
+                        ] = "medium"
+
+                    else:
+                        sale[
+                            "match_confidence"
+                        ] = "low"
+
+                    sale_id = sale[
+                        "id"
+                    ]
+
+                    existing = all_sales.get(
                         sale_id
-                    ] = sale
+                    )
+
+                    if (
+                        existing is None
+                        or score >
+                        existing.get(
+                            "match_score",
+                            0
+                        )
+                    ):
+
+                        all_sales[
+                            sale_id
+                        ] = sale
+
+                if not next_cursor:
+                    break
+                cursor = next_cursor
+            else:
+                # We ended because of our safety cap, not because the source
+                # ran out of history.  Surface that fact to the caller.
+                needs_continuation = True
 
         except Exception as exc:
 
@@ -1143,7 +1224,7 @@ def search_card_sales(
     )
 
     return {
-        "sales": sales[:50],
+        "sales": sales,
 
         "query_used": (
             unique_queries[0]
@@ -1156,6 +1237,13 @@ def search_card_sales(
             if sales
             else 0
         ),
+        "import_summary": {
+            "pages_scanned": pages_scanned,
+            "provider_total": provider_total or None,
+            "coverage": coverage,
+            "needs_continuation": needs_continuation,
+            "max_pages_per_query": max_pages,
+        },
     }
 
 

@@ -1,8 +1,9 @@
-"""Cardr web application.
+"""CARDR web application.
 
-The app is intentionally conservative: it shows a valuation only when stored,
-non-demo sale evidence supports it. Live marketplace ingestion is opt-in and
-requires the local CARD_API_KEY configuration used by ebay.py.
+Direct values are grounded in stored, non-demo sale evidence.  When an exact
+sale is unavailable, Prospectr returns a clearly labelled, low-confidence
+fallback rather than disguising a guess as a completed transaction.  Live
+marketplace ingestion is opt-in and requires ``CARD_API_KEY``.
 """
 
 import os
@@ -19,9 +20,17 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from accounts import (
+    get_uploaded_file,
+    initialize_accounts,
+    record_uploaded_file,
+    workspace_context,
+)
+from card_suggestions import suggest_card_details
 from database import DATABASE, get_connection, initialize_database, save_sales
 from cardr_score import build_card_price_history, calculate_cardr_score
 from market_data import SalesRepository
+from featured_market import build_featured_market
 from market_pulse import build_market_pulse
 from plans import public_plan_catalog
 from portfolio_insights import (
@@ -32,7 +41,10 @@ from portfolio_insights import (
 from valuation import CardQuery, calculate_valuation, find_comps
 from routes.vault_routes import router as vault_router
 from routes.watchlist_routes import router as watchlist_router
-from vault import get_vault_card, get_vault_cards, get_vault_summary
+from routes.account_routes import router as account_router
+from routes.alert_routes import router as alert_router
+from routes.community_routes import router as community_router
+from vault import get_vault_card, get_vault_cards, get_vault_summary, initialize_vault
 from watchlist import initialize_watchlist
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -84,15 +96,38 @@ render_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
 if render_hostname:
     allowed_hosts.append(render_hostname)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
-app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(vault_router)
 app.include_router(watchlist_router)
+app.include_router(account_router)
+app.include_router(alert_router)
+app.include_router(community_router)
+
+
+@app.middleware("http")
+async def launch_security_headers(request: Request, call_next):
+    """Add low-risk browser protections without breaking Cardr's app shell."""
+
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; frame-ancestors 'self'",
+    )
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 @app.on_event("startup")
 def prepare_database() -> None:
     """Create the existing SQLite tables before a sales refresh is requested."""
     initialize_database()
+    initialize_accounts()
+    initialize_vault()
     initialize_watchlist()
 
 
@@ -197,10 +232,37 @@ def _valuation_response(card: CardQuery, prediction_inputs: Optional[Dict[str, A
     }
 
 
-def _record_portfolio_snapshot(summary: Dict[str, Any]) -> None:
+def _record_portfolio_snapshot(summary: Dict[str, Any], owner_id: Optional[str] = None) -> None:
     """Store today's real portfolio state without inventing a back-history."""
     captured_at = datetime.now(timezone.utc)
     snapshot_date = captured_at.date().isoformat()
+    if owner_id is not None:
+        with get_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO account_portfolio_snapshots (
+                    owner_id, snapshot_date, total_value_cad, total_invested_cad,
+                    profit_loss_cad, card_count, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(owner_id, snapshot_date) DO UPDATE SET
+                    total_value_cad = excluded.total_value_cad,
+                    total_invested_cad = excluded.total_invested_cad,
+                    profit_loss_cad = excluded.profit_loss_cad,
+                    card_count = excluded.card_count,
+                    created_at = excluded.created_at
+                """,
+                (
+                    owner_id,
+                    snapshot_date,
+                    float(summary.get("total_estimated_value_cad") or 0),
+                    float(summary.get("total_purchase_price_cad") or 0),
+                    float(summary.get("total_profit_loss_cad") or 0),
+                    int(summary.get("card_count") or 0),
+                    captured_at.isoformat(),
+                ),
+            )
+            connection.commit()
+        return
     with get_connection() as connection:
         connection.execute(
             """
@@ -226,7 +288,29 @@ def _record_portfolio_snapshot(summary: Dict[str, Any]) -> None:
         connection.commit()
 
 
-def _portfolio_history() -> list[Dict[str, Any]]:
+def _portfolio_history(owner_id: Optional[str] = None) -> list[Dict[str, Any]]:
+    if owner_id is not None:
+        with get_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT snapshot_date, total_value_cad, total_invested_cad,
+                       profit_loss_cad, card_count
+                FROM account_portfolio_snapshots
+                WHERE owner_id = ?
+                ORDER BY snapshot_date ASC, id ASC
+                """,
+                (owner_id,),
+            ).fetchall()
+        return [
+            {
+                "date": row["snapshot_date"],
+                "total_value_cad": row["total_value_cad"],
+                "total_invested_cad": row["total_invested_cad"],
+                "profit_loss_cad": row["profit_loss_cad"],
+                "card_count": row["card_count"],
+            }
+            for row in rows
+        ]
     with get_connection() as connection:
         rows = connection.execute(
             """
@@ -271,6 +355,50 @@ async def home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("app.html", {"request": request})
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("privacy.html", {"request": request})
+
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("terms.html", {"request": request})
+
+
+@app.get("/uploads/{filename}", include_in_schema=False)
+async def uploaded_image(filename: str, request: Request) -> FileResponse:
+    """Serve a card photo only inside the workspace that owns it.
+
+    Upload names are intentionally opaque, but they are not treated as a
+    permission system.  Account ownership is checked server-side before the
+    file is returned.  Untracked legacy local photos remain available only in
+    the local guest workspace so existing development collections do not break.
+    """
+
+    context = workspace_context(request)
+    try:
+        upload = get_uploaded_file(filename)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail="Card photo not found.") from error
+
+    if upload is None:
+        if not context.guest_mode:
+            raise HTTPException(status_code=404, detail="Card photo not found.")
+    elif upload.get("owner_id") != context.owner_id:
+        raise HTTPException(status_code=404, detail="Card photo not found.")
+
+    image_path = UPLOADS_DIR / filename
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="Card photo not found.")
+
+    media_types = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+    return FileResponse(
+        image_path,
+        media_type=media_types.get(image_path.suffix.lower(), "application/octet-stream"),
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
 @app.get("/market", response_class=HTMLResponse)
 async def market_page() -> RedirectResponse:
     return RedirectResponse(url="/?view=market", status_code=303)
@@ -312,6 +440,18 @@ async def api_value(data: Dict[str, Any]) -> JSONResponse:
     )
 
 
+@app.post("/api/card-text-suggestions")
+async def card_text_suggestions(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Suggest editable details from user-provided card text, never a photo claim."""
+
+    raw_text = data.get("text", data.get("transcribed_text", ""))
+    try:
+        suggestion = suggest_card_details(raw_text)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    return {"success": True, **suggestion}
+
+
 @app.post("/api/comps")
 async def api_comps(data: Dict[str, Any]) -> Dict[str, Any]:
     card = _card_from_payload(data)
@@ -327,10 +467,22 @@ async def api_comps(data: Dict[str, Any]) -> Dict[str, Any]:
 @app.get("/api/recent-sales")
 async def recent_sales(limit: int = 12) -> Dict[str, Any]:
     summary = repository.source_summary()
+    displayed = repository.recent_sales(limit)
     return {
         "success": True,
-        "sales": [sale.as_dict() for sale in repository.recent_sales(limit)],
+        "sales": [sale.as_dict() for sale in displayed],
+        "sales_scope": "all_time_observed_completed_sales",
+        "displayed_count": len(displayed),
         "data_quality": summary,
+    }
+
+
+@app.get("/api/featured-market")
+async def featured_market(limit: int = 8) -> Dict[str, Any]:
+    """Return home-screen featured signals built only from observed sales."""
+    return {
+        "success": True,
+        **build_featured_market(repository.all_observed_sales(), limit=limit),
     }
 
 
@@ -385,9 +537,10 @@ async def market_pulse() -> Dict[str, Any]:
 
 
 @app.get("/api/cards/{card_id}/history")
-async def card_price_history(card_id: int) -> Dict[str, Any]:
+async def card_price_history(card_id: int, request: Request) -> Dict[str, Any]:
     """Return only real observed sale points for a saved Vault card."""
-    card = get_vault_card(card_id)
+    context = workspace_context(request)
+    card = get_vault_card(card_id, owner_id=context.owner_id)
     if card is None:
         raise HTTPException(status_code=404, detail="Vault card not found.")
     return {
@@ -398,9 +551,10 @@ async def card_price_history(card_id: int) -> Dict[str, Any]:
 
 
 @app.get("/api/cards/{card_id}/score")
-async def card_score(card_id: int) -> Dict[str, Any]:
+async def card_score(card_id: int, request: Request) -> Dict[str, Any]:
     """Return CARDR's explainable recorded-market score for a Vault card."""
-    card = get_vault_card(card_id)
+    context = workspace_context(request)
+    card = get_vault_card(card_id, owner_id=context.owner_id)
     if card is None:
         raise HTTPException(status_code=404, detail="Vault card not found.")
     return {
@@ -411,17 +565,18 @@ async def card_score(card_id: int) -> Dict[str, Any]:
 
 
 @app.get("/api/portfolio")
-async def portfolio() -> Dict[str, Any]:
+async def portfolio(request: Request) -> Dict[str, Any]:
     """Return current portfolio intelligence and record today's actual snapshot."""
-    cards = get_vault_cards()
-    summary = get_vault_summary()
-    _record_portfolio_snapshot(summary)
+    context = workspace_context(request)
+    cards = get_vault_cards(owner_id=context.owner_id)
+    summary = get_vault_summary(owner_id=context.owner_id)
+    _record_portfolio_snapshot(summary, owner_id=context.owner_id)
     return {
         "success": True,
         "summary": summary,
         "overview": build_portfolio_overview(cards),
         "composition": build_portfolio_composition(cards),
-        "history": _portfolio_history(),
+        "history": _portfolio_history(owner_id=context.owner_id),
         "history_note": (
             "Portfolio history begins with real snapshots recorded by CARDR; "
             "no earlier values were backfilled."
@@ -430,23 +585,25 @@ async def portfolio() -> Dict[str, Any]:
 
 
 @app.get("/api/pulse")
-async def pulse() -> Dict[str, Any]:
+async def pulse(request: Request) -> Dict[str, Any]:
     """Return the daily CARDR briefing from private Vault and observed sales."""
+    context = workspace_context(request)
     return {
         "success": True,
-        **build_cardr_pulse(get_vault_cards(), repository.all_observed_sales()),
+        **build_cardr_pulse(get_vault_cards(owner_id=context.owner_id), repository.all_observed_sales()),
         "data_quality": repository.source_summary(),
     }
 
 
 @app.post("/api/sales/refresh")
-async def refresh_sales(data: Dict[str, Any]) -> Dict[str, Any]:
+async def refresh_sales(data: Dict[str, Any], request: Request) -> Dict[str, Any]:
     """Fetch matching completed sales through the configured market-data source.
 
     The external provider and key stay server-side. This endpoint is useful in
     local development; production should protect it with authentication and
     rate limits before exposing it publicly.
     """
+    workspace_context(request)
     card = _card_from_payload(data)
     if not os.getenv("CARD_API_KEY"):
         raise HTTPException(
@@ -465,6 +622,7 @@ async def refresh_sales(data: Dict[str, Any]) -> Dict[str, Any]:
             year=int(card.year) if card.year.isdigit() else 0,
             set_name=card.set_name,
             card_type=card.card_type or "Base",
+            card_number=card.card_number or None,
             parallel=card.parallel or None,
             grade=card.grade or None,
         )
@@ -485,16 +643,19 @@ async def refresh_sales(data: Dict[str, Any]) -> Dict[str, Any]:
         "success": True,
         "query_used": result.get("query_used", ""),
         "imported_count": len(sales),
+        "import_summary": result.get("import_summary", {}),
         "valuation": _valuation_response(card)["valuation"],
     }
 
 
 @app.post("/scan")
 async def scan_card(
+    request: Request,
     image: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
 ) -> Dict[str, Any]:
     """Store a card photo safely; recognition is intentionally not faked."""
+    context = workspace_context(request)
     upload = image or file
     if upload is None:
         raise HTTPException(status_code=422, detail="Provide an image file.")
@@ -515,7 +676,14 @@ async def scan_card(
         )
 
     filename = "card-{}{}".format(uuid.uuid4().hex, extension)
-    (UPLOADS_DIR / filename).write_bytes(content)
+    image_path = UPLOADS_DIR / filename
+    image_path.write_bytes(content)
+    try:
+        record_uploaded_file(filename, context.owner_id)
+    except Exception:
+        # Do not leave a newly uploaded image without an ownership record.
+        image_path.unlink(missing_ok=True)
+        raise
     return {
         "success": True,
         "filename": filename,

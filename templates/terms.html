@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" href="/static/icons/cardr-icon.svg" type="image/svg+xml">
+  <title>Terms of Use — CARDR</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1220; --raised:#101b2d; --surface:#142239; --soft:rgba(148,163,184,.09); --line:rgba(203,213,225,.14); --line-strong:rgba(203,213,225,.27); --text:#f7f9fd; --muted:#9aa9c1; --quiet:#71829c; --blue:#75baff; --blue-ink:#07111d; --gold:#f4c976; --red:#ff8b9e; --shadow:0 18px 46px rgba(0,0,0,.22); }
+    * { box-sizing:border-box; }
+    html { background:var(--bg); scroll-behavior:smooth; }
+    body { min-width:320px; margin:0; color:var(--text); background:radial-gradient(56rem 34rem at 12% -12%,rgba(71,139,255,.18),transparent 62%),radial-gradient(45rem 30rem at 104% 12%,rgba(112,77,255,.12),transparent 64%),var(--bg); font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.6; }
+    a { color:var(--blue); }
+    a:focus-visible { outline:3px solid rgba(117,186,255,.45); outline-offset:3px; }
+    .shell { width:min(960px,calc(100% - 28px)); margin:0 auto; padding-bottom:56px; }
+    .topbar { position:sticky; z-index:5; top:10px; display:flex; align-items:center; justify-content:space-between; gap:14px; margin:10px 0 28px; border:1px solid var(--line-strong); border-radius:16px; padding:11px 14px; background:color-mix(in srgb,var(--bg) 82%,transparent); box-shadow:0 14px 38px rgba(0,0,0,.13); backdrop-filter:blur(16px); }
+    .brand { display:inline-flex; align-items:center; gap:9px; color:var(--text); font-size:17px; font-weight:950; letter-spacing:1.7px; text-decoration:none; }
+    .brand-mark { display:grid; width:29px; height:29px; place-items:center; border-radius:9px; color:var(--blue-ink); background:var(--blue); font-size:14px; letter-spacing:0; box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 12%,transparent); }
+    .back { border:1px solid var(--line); border-radius:10px; padding:7px 10px; color:var(--text); background:var(--surface); font-size:12px; font-weight:800; text-decoration:none; }
+    .back:hover { border-color:color-mix(in srgb,var(--blue) 50%,var(--line)); color:var(--blue); }
+    .hero { position:relative; overflow:hidden; padding:clamp(25px,5vw,48px); border:1px solid color-mix(in srgb,var(--blue) 27%,var(--line)); border-radius:24px; background:linear-gradient(125deg,color-mix(in srgb,var(--surface) 90%,#102a58),color-mix(in srgb,var(--surface) 91%,#29195d)); box-shadow:0 24px 58px rgba(3,9,22,.24); }
+    .hero::after { position:absolute; top:-45%; right:-10%; width:30rem; height:23rem; border-radius:50%; background:radial-gradient(ellipse,color-mix(in srgb,var(--blue) 24%,transparent),transparent 66%); content:""; pointer-events:none; }
+    .eyebrow { position:relative; z-index:1; color:var(--blue); font-size:10px; font-weight:900; letter-spacing:1.4px; text-transform:uppercase; }
+    h1 { position:relative; z-index:1; max-width:700px; margin:7px 0 8px; font-size:clamp(34px,7vw,58px); line-height:1.04; letter-spacing:-1.9px; }
+    .lede { position:relative; z-index:1; max-width:690px; margin:0; color:var(--muted); font-size:15px; }
+    .updated { position:relative; z-index:1; display:inline-flex; margin-top:18px; border:1px solid color-mix(in srgb,var(--blue) 32%,var(--line)); border-radius:999px; padding:5px 8px; color:var(--text); background:color-mix(in srgb,var(--blue) 9%,transparent); font-size:11px; font-weight:780; }
+    .content { display:grid; grid-template-columns:220px minmax(0,1fr); gap:28px; margin-top:29px; }
+    .toc { position:sticky; top:85px; align-self:start; border:1px solid var(--line); border-radius:17px; padding:12px; background:color-mix(in srgb,var(--surface) 94%,transparent); }
+    .toc strong { display:block; margin:2px 7px 8px; color:var(--muted); font-size:10px; letter-spacing:.9px; text-transform:uppercase; }
+    .toc a { display:block; border-radius:9px; padding:6px 7px; color:var(--muted); font-size:12px; font-weight:720; text-decoration:none; }
+    .toc a:hover { color:var(--text); background:var(--soft); }
+    .article { min-width:0; }
+    section { margin:0 0 14px; border:1px solid var(--line); border-radius:18px; padding:clamp(18px,3vw,27px); background:var(--surface); box-shadow:var(--shadow); }
+    h2 { margin:0 0 9px; font-size:20px; line-height:1.25; letter-spacing:-.4px; }
+    h3 { margin:18px 0 4px; font-size:14px; }
+    p, li { color:var(--muted); font-size:14px; }
+    p { margin:0 0 11px; }
+    p:last-child { margin-bottom:0; }
+    ul { margin:8px 0 4px; padding-left:20px; }
+    li { margin:6px 0; }
+    .callout { border-color:color-mix(in srgb,var(--gold) 42%,var(--line)); background:color-mix(in srgb,var(--gold) 7%,var(--surface)); }
+    .callout h2 { color:var(--gold); }
+    .warning { border-color:color-mix(in srgb,var(--red) 38%,var(--line)); background:color-mix(in srgb,var(--red) 6%,var(--surface)); }
+    .warning h2 { color:var(--red); }
+    .contact { border-color:color-mix(in srgb,var(--blue) 35%,var(--line)); background:linear-gradient(135deg,color-mix(in srgb,var(--blue) 10%,var(--surface)),var(--surface)); }
+    .contact p { color:var(--text); }
+    footer { padding:11px 4px 0; color:var(--quiet); font-size:11px; text-align:center; }
+    @media (max-width:720px) { .content { grid-template-columns:1fr; gap:14px; } .toc { position:static; display:flex; flex-wrap:wrap; gap:2px; } .toc strong { width:100%; } .toc a { font-size:11px; } }
+    @media (max-width:420px) { .shell { width:min(100% - 20px,960px); } .topbar { top:7px; margin-top:7px; } .brand { font-size:15px; } .hero { border-radius:19px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <nav class="topbar" aria-label="Legal navigation">
+      <a class="brand" href="/" aria-label="CARDR home"><span class="brand-mark">C</span>CARDR<span style="color:var(--blue)">.</span></a>
+      <a class="back" href="/">← Back to CARDR</a>
+    </nav>
+
+    <header class="hero">
+      <div class="eyebrow">CARDR · Built in Canada</div>
+      <h1>Terms that keep the signal honest.</h1>
+      <p class="lede">These Terms explain the ground rules for using CARDR’s collection tools, all-time market evidence, and Prospectr estimates.</p>
+      <span class="updated">Last updated: September 14, 2026</span>
+    </header>
+
+    <div class="content">
+      <nav class="toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <a href="#accept">Acceptance</a>
+        <a href="#account">Your account</a>
+        <a href="#content">Your content</a>
+        <a href="#data">Market data &amp; Prospectr</a>
+        <a href="#rules">Acceptable use</a>
+        <a href="#availability">Availability</a>
+        <a href="#liability">Disclaimers &amp; liability</a>
+        <a href="#contact">Contact CARDR</a>
+      </nav>
+
+      <article class="article">
+        <section id="accept">
+          <h2>1. Acceptance</h2>
+          <p>By accessing or using CARDR’s website, app, Vault, Watchlist, market tools, or Prospectr features (together, “CARDR”), you agree to these Terms of Use and our <a href="/privacy">Privacy Notice</a>. If you do not agree, please do not use CARDR.</p>
+          <p>You must be able to form a binding agreement where you live, or use CARDR with the permission and supervision of a parent or guardian who can do so. If you use CARDR for an organization, you confirm that you are authorized to accept these Terms for it.</p>
+        </section>
+
+        <section id="account">
+          <h2>2. Your account</h2>
+          <p>Keep your account details accurate and your password confidential. You are responsible for activity that occurs through your account. Tell us promptly at <a href="mailto:privacy@cardrsports.com">privacy@cardrsports.com</a> if you believe your account has been accessed without permission.</p>
+          <p>We may suspend or close an account when reasonably necessary to protect CARDR, other collectors, or the service—for example, for fraud, abuse, a serious breach of these Terms, or a legal requirement. Where practical, we will explain the reason and give you a reasonable opportunity to resolve the issue.</p>
+        </section>
+
+        <section id="content">
+          <h2>3. Your collection content</h2>
+          <p>You keep ownership of the card details, notes, and images you add to CARDR (“Your Content”). You give CARDR a limited, non-exclusive permission to store, process, display, and use Your Content only as needed to operate, secure, support, and improve CARDR for you.</p>
+          <p>You confirm that you have the rights needed to upload Your Content and that it does not violate another person’s privacy, intellectual-property rights, or applicable law. Do not upload harmful files, personal information about other people without permission, or material that you are not allowed to share.</p>
+          <p>Your Vault and Watchlist are private by default. If CARDR later offers a feature that publishes or shares collection information, the feature should ask you to take a clear action before it makes that information visible.</p>
+        </section>
+
+        <section id="data" class="callout">
+          <h2>4. Market evidence and Prospectr estimates</h2>
+          <p>CARDR uses observed completed-sale records and transparent predictive signals to provide market context. Third-party data can be incomplete, delayed, old, incorrectly identified, unavailable, or removed. CARDR does not promise that every sale, listing, player, card variation, grade, currency conversion, chart, or source record is complete or correct.</p>
+          <p>Prospectr is an informational estimation tool. A Prospectr output is not a completed sale, appraisal, offer to buy, auction reserve, insurance valuation, tax valuation, financial advice, or guarantee of a future sale price. A low-confidence estimate can be based on broad comparable signals or a fallback value when direct evidence is missing.</p>
+          <p>You are responsible for checking the card identity, condition, grade, serial number, market evidence, and terms of any marketplace before buying, selling, grading, insuring, or otherwise relying on a value. Do not treat CARDR as the sole basis for a material decision.</p>
+        </section>
+
+        <section id="rules">
+          <h2>5. Use CARDR fairly</h2>
+          <p>Please use CARDR for legitimate collection and market-research purposes. You may not:</p>
+          <ul>
+            <li>interfere with, overload, probe, or disrupt CARDR or its security controls;</li>
+            <li>use bots, scripts, or automated means to access CARDR except through a documented interface we authorize;</li>
+            <li>copy, resell, scrape, or redistribute CARDR data or features in a way that violates these Terms, a provider’s terms, or applicable law;</li>
+            <li>attempt to access another collector’s account, collection, or data without permission;</li>
+            <li>misrepresent CARDR data or Prospectr estimates as verified sales, appraisals, or guaranteed values; or</li>
+            <li>use CARDR to violate law, infringe rights, or harm people or systems.</li>
+          </ul>
+        </section>
+
+        <section id="availability">
+          <h2>6. Availability and changes</h2>
+          <p>CARDR is evolving. We may change, add, limit, pause, or retire features to improve the product, maintain security, comply with law, or respond to third-party data availability. We aim to give reasonable notice before a material change when practical, but cannot promise that every feature or data source will always be available.</p>
+          <p>Features may have fair-use or product limits. If CARDR displays a limit, please respect it. We may use reasonable controls to protect reliability and fair access.</p>
+        </section>
+
+        <section id="ownership">
+          <h2>7. CARDR’s content and brand</h2>
+          <p>CARDR, Prospectr, and their associated names, logos, interface, code, and original content are protected by applicable intellectual-property laws. Except for the limited right to use CARDR under these Terms, no rights are granted to you. Feedback you choose to send may be used by CARDR to improve the product without obligation to you, as permitted by law.</p>
+        </section>
+
+        <section id="ending">
+          <h2>8. Ending use and your data</h2>
+          <p>You may stop using CARDR at any time. If account features are available, you may request an export or deletion of your personal information by emailing <a href="mailto:privacy@cardrsports.com">privacy@cardrsports.com</a>. See the <a href="/privacy">Privacy Notice</a> for how we handle those requests and limited retention for security, legal, and backup purposes.</p>
+        </section>
+
+        <section id="liability" class="warning">
+          <h2>9. Disclaimers and limits of liability</h2>
+          <p>CARDR is provided on an “as is” and “as available” basis, to the extent permitted by law. We do not make promises that CARDR will be uninterrupted, error-free, secure, complete, or suitable for every purpose, or that a market-data result or estimate will reflect a card’s actual sale price.</p>
+          <p>To the extent permitted by law, CARDR and its team will not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages, or for lost profits, lost data, lost opportunities, or losses arising from a card transaction or reliance on market information. Nothing in these Terms excludes liability that cannot be excluded under applicable law or limits rights you may have that cannot be waived.</p>
+        </section>
+
+        <section id="changes">
+          <h2>10. Changes to these Terms</h2>
+          <p>We may update these Terms as CARDR changes. We will post the revised version here and update the “Last updated” date. If a change is material, we will use a reasonable method to bring it to your attention before it takes effect when practical. Continuing to use CARDR after the effective date means you accept the updated Terms.</p>
+        </section>
+
+        <section id="contact" class="contact">
+          <h2>11. Contact CARDR</h2>
+          <p>Questions about these Terms, data, or CARDR? Email <a href="mailto:privacy@cardrsports.com">privacy@cardrsports.com</a>.</p>
+          <p>These Terms are written in plain language for CARDR’s current product. They do not replace rights or protections that apply to you under law.</p>
+        </section>
+      </article>
+    </div>
+    <footer>© 2026 CARDR · <a href="/privacy">Privacy Notice</a> · <a href="/">Return to CARDR</a></footer>
+  </main>
+</body>
+</html>

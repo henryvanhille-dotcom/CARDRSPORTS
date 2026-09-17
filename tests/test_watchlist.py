@@ -36,13 +36,15 @@ class WatchlistTests(unittest.TestCase):
                 card_number="175", grade="psa 9",
             )
 
-    def test_target_comparison_is_absent_without_observed_market_evidence(self):
+    def test_target_comparison_uses_a_disclosed_starter_value_without_observed_evidence(self):
         card = watchlist.add_watchlist_card(
             player="No Evidence", year=2025, set_name="Unknown", target_price_cad="170",
         )
-        self.assertIsNone(card["current_estimate_cad"])
-        self.assertIsNone(card["target_comparison"])
-        self.assertEqual("insufficient_data", card["market_estimate"]["status"])
+        self.assertEqual(25.0, card["current_estimate_cad"])
+        self.assertEqual(-145.0, card["target_comparison"]["estimated_minus_target_cad"])
+        self.assertEqual("predictive", card["market_estimate"]["status"])
+        self.assertEqual("low", card["market_estimate"]["confidence_level"])
+        self.assertIn("Low-confidence", card["market_estimate"]["message"])
 
     def test_observed_sales_produce_an_explicit_target_vs_estimate_calculation(self):
         with (self.base_dir / "sales_data.csv").open("w", newline="") as handle:

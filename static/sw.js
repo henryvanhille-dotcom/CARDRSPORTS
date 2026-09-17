@@ -5,12 +5,14 @@
  * data, market responses, uploads, and every mutation stay network-only so a
  * shared device never receives a cached copy of private collection data.
  */
-const CACHE_NAME = "cardr-shell-v1";
+const CACHE_NAME = "cardr-shell-v3";
 const APP_SHELL = [
   "/",
   "/static/manifest.webmanifest",
   "/static/icons/cardr-icon.svg",
   "/static/icons/cardr-icon-maskable.svg",
+  "/static/icons/prospectr-mark.svg",
+  "/static/cardr-refresh.css",
 ];
 const STATIC_ASSET = /\.(?:css|js|mjs|webmanifest|svg|png|webp|ico|woff2?)$/i;
 

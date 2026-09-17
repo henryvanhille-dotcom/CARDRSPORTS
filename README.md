@@ -16,6 +16,18 @@ marketplace sales and shows every transaction or predictive anchor used.
   exact related sales, recent market segment, or user-supplied anchor used.
 - A personal Vault with validated collection records, photo upload, favorite
   cards, and a one-click evidence-based value refresh for each saved card.
+- Private account sessions and account-scoped Vault, Watchlist, imports,
+  portfolio snapshots, and in-app alerts. A public deployment disables guest
+  workspaces by default, so one collector cannot read another collector's data.
+- Safe CSV collection import with an explicit preview/confirmation step,
+  common-header mapping, invalid-row reporting, and formula neutralization.
+- Text-only card-detail suggestions from collector-supplied OCR or
+  transcription. CARDR never claims to recognize a photo, and the collector
+  must confirm every editable suggestion before saving or analyzing.
+- Consent-based public collector profiles. Public profiles exclude purchase
+  prices, private notes, and uploaded images.
+- In-app alert rules for targets, observed price moves, new completed comps,
+  and verified market signals. Predictive values never trigger price alerts.
 - A comparable-sales engine that ranks same-player sales by supplied card
   details and distinguishes exact-card matches from broader matches.
 - A recency- and match-quality-weighted CAD estimate, range, confidence, and
@@ -68,9 +80,14 @@ the same local paths during development.
 
 The production disk begins as an intentionally clean dataset; this deployment
 configuration does not publish a developer's local Vault or uploaded images.
-Before inviting customers to use Vault or Watchlist, add real user accounts and
-server-side per-user plan enforcement. Without authentication, a shared public
-deployment cannot safely treat Vault records as private.
+The included blueprint sets `CARDR_GUEST_MODE=false` and secure cookies for a
+public deployment. Cardr will require an account before a collector can access
+Vault, Watchlist, portfolio, photo upload, imports, or alerts. Local preview
+mode keeps a single-device guest workspace available for development.
+
+Cardr uses SQLite on the configured persistent disk. That is suitable for a
+single managed application instance; move to a managed multi-user database
+before scaling horizontally or running multiple web instances.
 
 ## Sales data contract
 
@@ -90,10 +107,11 @@ an audited FX-rate source before treating that conversion as production-grade.
 Predictive mode deliberately has a higher evidence bar than a simple guess:
 
 - An exact stored sale always takes precedence over the model.
-- Otherwise, the model needs either related same-player stored sales (same year
-  or product), a recent 1st Bowman autograph market segment for a confirmed
-  1st Bowman auto, or a user-supplied reference value. With none of these, it
-  returns no dollar figure.
+- Otherwise, the model steps through related same-player sales, a 1st Bowman
+  autograph segment where confirmed, broader similar-card sales, an all-market
+  baseline, and finally a clearly labelled starter fallback. Every fallback is
+  low confidence with a deliberately wide range; it is never a completed sale
+  or confirmed exact-card value.
 - The result exposes its baseline, scarcity multiplier, related-comp count,
   broad range, confidence cap, and a monthly sales chart of the exact evidence
   that anchored the result.
@@ -102,8 +120,12 @@ Predictive mode deliberately has a higher evidence bar than a simple guess:
 
 ## Honest current limits
 
-- Cardr does not yet recognize a card from its photo.
+- Cardr does not recognize a card from its photo. It can only make
+  non-authoritative detail suggestions from text you paste or transcribe.
 - It does not infer player-comparison groups, PSA population, print run, or
   future prices yet. A print run must be supplied by the user when known.
-- A public deployment needs authentication and rate limiting on
-  `POST /api/sales/refresh` before that endpoint is exposed.
+- Alert delivery is in-app only. A connected, consent-aware email or push
+  provider is still needed before Cardr sends reminders or weekly recaps.
+- Billing and checkout are intentionally not connected.
+- A public deployment should set `CARD_API_KEY` only after reviewing the
+  market-data provider's permitted use, retention, and rate limits.

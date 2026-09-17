@@ -22,8 +22,22 @@ MAX_TEXT_LENGTH = 500
 VALID_PROSPECTR_STATUSES = {
     "not_analyzed",
     "analyzed",
+    "low_confidence",
     "insufficient_data",
 }
+
+
+def _owner_clause(owner_id: Optional[str]) -> tuple[str, List[Any]]:
+    """Return a SQLite-safe scope for a private workspace.
+
+    ``NULL`` is deliberately reserved for the single-device local guest
+    workspace.  A signed-in collector always receives an exact owner match,
+    so one account can never read or mutate another account's cards.
+    """
+
+    if owner_id is None:
+        return "owner_id IS NULL", []
+    return "owner_id = ?", [owner_id]
 
 
 def _now() -> str:
@@ -164,6 +178,7 @@ def initialize_vault():
         connection.execute("""
             CREATE TABLE IF NOT EXISTS vault_cards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id TEXT,
 
                 player TEXT NOT NULL,
                 year INTEGER,
@@ -194,6 +209,12 @@ def initialize_vault():
             )
         """)
 
+        existing_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(vault_cards)").fetchall()
+        }
+        if "owner_id" not in existing_columns:
+            connection.execute("ALTER TABLE vault_cards ADD COLUMN owner_id TEXT")
+
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_vault_player
             ON vault_cards(player)
@@ -202,6 +223,11 @@ def initialize_vault():
         connection.execute("""
             CREATE INDEX IF NOT EXISTS idx_vault_created
             ON vault_cards(created_at)
+        """)
+
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS idx_vault_owner_created
+            ON vault_cards(owner_id, created_at)
         """)
 
         connection.commit()
@@ -243,6 +269,7 @@ def add_vault_card(
     value_confidence: Optional[float] = None,
     notes: str = "",
     favorite: bool = False,
+    owner_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Add a card to the user's Vault."""
 
@@ -280,6 +307,7 @@ def add_vault_card(
     with get_connection() as connection:
         cursor = connection.execute("""
             INSERT INTO vault_cards (
+                owner_id,
                 player,
                 year,
                 set_name,
@@ -309,7 +337,7 @@ def add_vault_card(
             )
 
             VALUES (
-                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?,
                 ?,
                 ?, ?,
                 ?, ?,
@@ -319,6 +347,7 @@ def add_vault_card(
                 ?, ?
             )
         """, (
+            owner_id,
             values["player"],
             values["year"],
             values["set_name"],
@@ -350,20 +379,21 @@ def add_vault_card(
         card_id = cursor.lastrowid
         connection.commit()
 
-    return get_vault_card(card_id)
+    return get_vault_card(card_id, owner_id=owner_id)
 
 
-def get_vault_card(card_id: int) -> Optional[Dict[str, Any]]:
+def get_vault_card(card_id: int, owner_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get one Vault card by ID."""
 
     initialize_vault()
 
+    owner_sql, owner_params = _owner_clause(owner_id)
     with get_connection() as connection:
         row = connection.execute("""
             SELECT *
             FROM vault_cards
-            WHERE id = ?
-        """, (card_id,)).fetchone()
+            WHERE id = ? AND {}
+        """.format(owner_sql), [card_id, *owner_params]).fetchone()
 
     if row is None:
         return None
@@ -374,18 +404,20 @@ def get_vault_card(card_id: int) -> Optional[Dict[str, Any]]:
 def get_vault_cards(
     search: str = "",
     favorite_only: bool = False,
+    owner_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Return Vault cards, newest first."""
 
     initialize_vault()
 
+    owner_sql, owner_params = _owner_clause(owner_id)
     query = """
         SELECT *
         FROM vault_cards
-        WHERE 1 = 1
-    """
+        WHERE {}
+    """.format(owner_sql)
 
-    params = []
+    params: List[Any] = list(owner_params)
 
     if search.strip():
         query += """
@@ -426,6 +458,7 @@ def get_vault_cards(
 
 def update_vault_card(
     card_id: int,
+    owner_id: Optional[str] = None,
     **updates,
 ) -> Optional[Dict[str, Any]]:
     """Update allowed Vault card fields."""
@@ -457,9 +490,9 @@ def update_vault_card(
     }
 
     if not requested_updates:
-        return get_vault_card(card_id)
+        return get_vault_card(card_id, owner_id=owner_id)
 
-    current = get_vault_card(card_id)
+    current = get_vault_card(card_id, owner_id=owner_id)
 
     if current is None:
         return None
@@ -506,43 +539,45 @@ def update_vault_card(
         set_parts.append(f"{key} = ?")
         values.append(value)
 
-    values.append(card_id)
+    owner_sql, owner_params = _owner_clause(owner_id)
+    values.extend([card_id, *owner_params])
 
     with get_connection() as connection:
         connection.execute(
             f"""
             UPDATE vault_cards
             SET {", ".join(set_parts)}
-            WHERE id = ?
+            WHERE id = ? AND {owner_sql}
             """,
             values,
         )
 
         connection.commit()
 
-    return get_vault_card(card_id)
+    return get_vault_card(card_id, owner_id=owner_id)
 
 
-def delete_vault_card(card_id: int) -> bool:
+def delete_vault_card(card_id: int, owner_id: Optional[str] = None) -> bool:
     """Delete a card from the Vault."""
 
     initialize_vault()
 
+    owner_sql, owner_params = _owner_clause(owner_id)
     with get_connection() as connection:
         cursor = connection.execute("""
             DELETE FROM vault_cards
-            WHERE id = ?
-        """, (card_id,))
+            WHERE id = ? AND {}
+        """.format(owner_sql), [card_id, *owner_params])
 
         connection.commit()
 
     return cursor.rowcount > 0
 
 
-def toggle_favorite(card_id: int) -> Optional[Dict[str, Any]]:
+def toggle_favorite(card_id: int, owner_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Toggle a card's favorite status."""
 
-    card = get_vault_card(card_id)
+    card = get_vault_card(card_id, owner_id=owner_id)
 
     if card is None:
         return None
@@ -551,13 +586,14 @@ def toggle_favorite(card_id: int) -> Optional[Dict[str, Any]]:
 
     return update_vault_card(
         card_id,
+        owner_id=owner_id,
         favorite=new_value,
     )
 
 
-def analyze_vault_card(card_id: int) -> Optional[Dict[str, Any]]:
-    """Refresh a Vault card from stored market evidence without fabricating a value."""
-    card = get_vault_card(card_id)
+def analyze_vault_card(card_id: int, owner_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Refresh a Vault card with direct evidence or a disclosed fallback value."""
+    card = get_vault_card(card_id, owner_id=owner_id)
     if card is None:
         return None
 
@@ -566,9 +602,16 @@ def analyze_vault_card(card_id: int) -> Optional[Dict[str, Any]]:
         query,
         SalesRepository(BASE_DIR, db_path=database.DATABASE).all_observed_sales(),
     )
-    status = "analyzed" if valuation["status"] == "estimated" else "insufficient_data"
+    status = (
+        "analyzed"
+        if valuation["status"] == "estimated"
+        else "low_confidence"
+        if valuation.get("confidence_level") == "low"
+        else "insufficient_data"
+    )
     updated = update_vault_card(
         card_id,
+        owner_id=owner_id,
         estimated_value_cad=valuation["estimated_value_cad"],
         value_confidence=valuation["confidence_percent"],
         prospectr_status=status,
@@ -576,11 +619,12 @@ def analyze_vault_card(card_id: int) -> Optional[Dict[str, Any]]:
     return {"card": updated, "valuation": valuation}
 
 
-def get_vault_summary() -> Dict[str, Any]:
+def get_vault_summary(owner_id: Optional[str] = None) -> Dict[str, Any]:
     """Return collection-level Vault statistics."""
 
     initialize_vault()
 
+    owner_sql, owner_params = _owner_clause(owner_id)
     with get_connection() as connection:
 
         row = connection.execute("""
@@ -653,7 +697,8 @@ def get_vault_summary() -> Dict[str, Any]:
                 ) AS favorite_cards
 
             FROM vault_cards
-        """).fetchone()
+            WHERE {}
+        """.format(owner_sql), owner_params).fetchone()
 
     return {
         "card_count": int(row["card_count"] or 0),

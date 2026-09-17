@@ -1,8 +1,9 @@
 """Evidence-first card valuation.
 
-This module produces estimates only from stored, non-demo sale records.  It
-does not use hard-coded player values or invented sales, and labels broad
-comparables so the user can see exactly what supports an estimate.
+Direct estimates use stored, non-demo completed sales.  When a specific card
+has no direct match, Prospectr still returns a number using a clearly labelled
+fallback ladder.  Those numbers are deliberately low confidence and never
+presented as an observed sale or an exact-card value.
 """
 
 import math
@@ -13,6 +14,12 @@ from statistics import median
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from market_data import Sale, normalize_text
+
+
+# This only applies when CARDR has *zero* observed, non-demo sales to use as a
+# market prior.  It makes the "every card gets an estimate" promise possible
+# on a fresh installation while keeping the result visibly low confidence.
+UNANCHORED_DEFAULT_CAD = 25.0
 
 
 @dataclass(frozen=True)
@@ -86,6 +93,15 @@ def _field_match(expected: str, actual: str) -> bool:
 def match_sale(card: CardQuery, sale: Sale) -> Optional[MatchedSale]:
     """Rank one observed sale without pretending a broad comp is an exact sale."""
     if not card.player or normalize_text(card.player) != normalize_text(sale.player):
+        return None
+    # A known, conflicting card number is a different card—not a weak direct
+    # comp.  This prevents #145 or a Rookie Debut from being blended into an
+    # HMT1-style exact-card estimate just because the player and set overlap.
+    if (
+        card.card_number
+        and sale.card_number
+        and normalize_text(card.card_number) != normalize_text(sale.card_number)
+    ):
         return None
 
     score = 45
@@ -208,28 +224,90 @@ def find_first_bowman_auto_comps(
     today: date,
     limit: int = 12,
 ) -> List[MatchedSale]:
-    """Return recent first-Bowman autograph sales for a segment-level fallback.
+    """Return all observed first-Bowman auto sales for a segment fallback.
 
     A segment fallback is useful only for a user-confirmed first-Bowman auto.
     It is intentionally labelled as market-segment evidence, never as a
     player-specific comparable.
     """
-    recent_cutoff = today.toordinal() - 540
     comps = []
     for sale in sales:
         if not _is_first_bowman_autograph(sale):
-            continue
-        if sale.sale_date and not recent_cutoff <= sale.sale_date.toordinal() <= today.toordinal():
             continue
         comps.append(
             MatchedSale(
                 sale=sale,
                 score=60,
                 level="first_bowman_auto_segment",
-                reasons=("recent first-Bowman autograph market segment",),
+                reasons=("all-time first-Bowman autograph market segment",),
             )
         )
     return sorted(comps, key=lambda item: item.sale.sale_date or date.min, reverse=True)[:limit]
+
+
+def find_broad_similarity_comps(
+    card: CardQuery,
+    sales: Iterable[Sale],
+    limit: int = 24,
+) -> List[MatchedSale]:
+    """Find labelled, non-player-specific market-segment anchors.
+
+    A broad comparable must share at least one real card attribute.  It is
+    never returned from :func:`find_comps`, so callers cannot accidentally
+    display it as an exact or direct sale.
+    """
+    matches: List[MatchedSale] = []
+    for sale in sales:
+        # Same-player sales belong in the stronger related-player tier.
+        if card.player and normalize_text(card.player) == normalize_text(sale.player):
+            continue
+
+        score = 0
+        reasons: List[str] = []
+        exact_set_match = False
+        comparisons = (
+            ("same set", card.set_name, sale.set_name, 35),
+            ("same year", card.year, sale.year, 10),
+            ("same card type", card.card_type, sale.card_type, 10),
+            ("same parallel", card.parallel, sale.parallel, 7),
+            ("same grade", card.grade, sale.grade, 5),
+        )
+        for label, expected, actual, points in comparisons:
+            if expected and _field_match(expected, actual):
+                score += points
+                reasons.append(label)
+                if label == "same set":
+                    exact_set_match = True
+
+        # A shared product-family token is weaker than an exact product but is
+        # still useful when the supplied set is sparse (for example, Bowman
+        # Chrome across a release family).  It cannot make a match by itself.
+        set_tokens = set(normalize_text(card.set_name).split())
+        sale_tokens = set(normalize_text(sale.set_name).split())
+        shared_tokens = set_tokens & sale_tokens
+        if shared_tokens and normalize_text(card.set_name) != normalize_text(sale.set_name):
+            score += 12
+            reasons.append("shared product family")
+
+        # A shared card type alone (for example, just "RC") is not a
+        # meaningful similarity signal.  Require an exact product, or two
+        # independent attributes, before calling a sale broadly similar.
+        if not reasons or (not exact_set_match and len(reasons) < 2):
+            continue
+        matches.append(
+            MatchedSale(
+                sale=sale,
+                score=min(70, score),
+                level="broad_similar_card",
+                reasons=tuple(reasons),
+            )
+        )
+
+    return sorted(
+        matches,
+        key=lambda item: (item.score, item.sale.sale_date or date.min),
+        reverse=True,
+    )[:limit]
 
 
 def _weighted_quantile(items: Sequence[Tuple[float, float]], quantile: float) -> float:
@@ -351,6 +429,29 @@ def _sales_chart(comps: Sequence[MatchedSale]) -> List[Dict[str, object]]:
     ]
 
 
+def _all_market_baseline(sales: Iterable[Sale]) -> Tuple[Optional[float], List[MatchedSale]]:
+    """Return a robust all-market historical prior without inventing a sale.
+
+    The prior intentionally uses every valid stored transaction as an equally
+    weighted historical observation.  It is a last-resort market signal, not
+    a comparable-card calculation, and callers cap its confidence accordingly.
+    """
+    anchors = [
+        MatchedSale(
+            sale=sale,
+            score=20,
+            level="global_market_baseline",
+            reasons=("all-time observed market sale",),
+        )
+        for sale in sales
+        if sale.price_cad > 0
+    ]
+    anchors = _remove_outliers(anchors)
+    if not anchors:
+        return None, []
+    return median(comp.sale.price_cad for comp in anchors), anchors
+
+
 def _predictive_valuation(
     card: CardQuery,
     sales: Iterable[Sale],
@@ -361,13 +462,27 @@ def _predictive_valuation(
     reference_value_cad: Optional[float],
     first_bowman_auto: bool,
 ) -> Dict[str, object]:
+    """Estimate through a transparent, strongest-evidence-first fallback ladder."""
+    sales = list(sales)
     related = _remove_outliers(find_predictive_comps(card, sales))
-    segment = []
+    segment: List[MatchedSale] = []
+    broad: List[MatchedSale] = []
+    global_anchors: List[MatchedSale] = []
     multiplier, scarcity_label = _scarcity_profile(one_of_one, print_run)
+    baseline: Optional[float] = None
+    basis = ""
+    fallback_tier = ""
+    anchor_kind = ""
+    anchors: List[MatchedSale] = []
+    confidence_cap = 48
+    uncertainty = 0.5
 
     if reference_value_cad is not None:
         baseline = reference_value_cad
         basis = "user-supplied reference value"
+        fallback_tier = "reference_value"
+        anchor_kind = "reference_value"
+        anchors = related
         if first_bowman_auto and not related:
             segment = _remove_outliers(find_first_bowman_auto_comps(sales, today))
     elif related:
@@ -376,6 +491,9 @@ def _predictive_valuation(
             0.5,
         )
         basis = "related stored sales"
+        fallback_tier = "related_player_sales"
+        anchor_kind = "related_player_sales"
+        anchors = related
     elif first_bowman_auto:
         segment = _remove_outliers(find_first_bowman_auto_comps(sales, today))
         if segment:
@@ -383,65 +501,97 @@ def _predictive_valuation(
                 [(comp.sale.price_cad, _weight(comp, today)) for comp in segment],
                 0.5,
             )
-            basis = "recent first-Bowman autograph market segment"
-        else:
-            baseline = None
-    else:
-        baseline = None
+            basis = "all-time first-Bowman autograph market segment"
+            fallback_tier = "first_bowman_auto_segment"
+            anchor_kind = "first_bowman_auto_segment"
+            anchors = segment
 
-    anchors = related or segment
     if baseline is None:
-        return {
-            "status": "insufficient_data",
-            "estimated_value_cad": None,
-            "low_estimate_cad": None,
-            "high_estimate_cad": None,
-            "confidence_percent": 0,
-            "evidence_score": 0,
-            "comp_count": 0,
-            "exact_comp_count": 0,
-            "related_comp_count": 0,
-            "anchor_kind": "none",
-            "is_predictive": True,
-            "valuation_method": "No prediction without a related sale, qualifying market segment, or reference value.",
-            "rationale": [
-                "No exact sale is stored for this card, and Prospectr has no suitable same-player or first-Bowman-auto market anchor.",
-                "Add a recent related sale, confirm the first-Bowman-auto category, or enter a defensible reference value before relying on a prediction.",
-            ],
-            "comps": [],
-            "sales_chart": [],
-        }
+        broad = _remove_outliers(find_broad_similarity_comps(card, sales))
+        if broad:
+            baseline = _weighted_quantile(
+                [(comp.sale.price_cad, _weight(comp, today)) for comp in broad],
+                0.5,
+            )
+            basis = "broader similar-card sales"
+            fallback_tier = "broad_similar_cards"
+            anchor_kind = "broad_similar_card_sales"
+            anchors = broad
+            confidence_cap = 12
+            uncertainty = 0.65
+
+    if baseline is None:
+        baseline, global_anchors = _all_market_baseline(sales)
+        if baseline is not None:
+            basis = "all-time observed market baseline"
+            fallback_tier = "global_market_baseline"
+            anchor_kind = "global_market_baseline"
+            anchors = global_anchors
+            confidence_cap = 5
+            uncertainty = 0.8
+
+    if baseline is None:
+        baseline = UNANCHORED_DEFAULT_CAD
+        basis = "CARDR starter-value prior with no observed sales"
+        fallback_tier = "unanchored_default"
+        anchor_kind = "unanchored_default"
+        anchors = []
+        # Without a real market anchor, do not imply that scarcity math makes
+        # a made-up prior more trustworthy.
+        multiplier = 1.0
+        scarcity_label = "no evidence-backed scarcity adjustment"
+        confidence_cap = 2
+        uncertainty = 0.9
 
     estimate = baseline * multiplier
     # Rarity has much wider uncertainty than a comp-backed price. One-of-ones
     # are intentionally shown with the broadest interval.
-    uncertainty = 0.65 if one_of_one or print_run == 1 else 0.5
+    if one_of_one or print_run == 1:
+        uncertainty = max(uncertainty, 0.65)
     low = estimate * (1 - uncertainty)
     high = estimate * (1 + uncertainty)
-    confidence = 15
+    if fallback_tier == "unanchored_default":
+        low, high = estimate * 0.1, estimate * 4.0
+    confidence = min(15, confidence_cap)
     if related:
-        confidence = min(48, max(18, round(_confidence(related, today) * 0.52)))
+        confidence = min(confidence_cap, max(18, round(_confidence(related, today) * 0.52)))
     elif segment:
         # Segment-level demand is weaker evidence than a same-player comp.
         confidence = min(30, max(12, round(_confidence(segment, today) * 0.34)))
+    elif broad:
+        confidence = min(confidence_cap, max(8, round(_confidence(broad, today) * 0.20)))
+    elif global_anchors:
+        confidence = confidence_cap
     if reference_value_cad is not None:
-        confidence = min(48, confidence + 4)
+        confidence = min(confidence_cap, confidence + 4)
 
-    anchor_kind = (
-        "reference_value" if reference_value_cad is not None
-        else "related_player_sales" if related
-        else "first_bowman_auto_segment"
-    )
     if related:
         anchor_statement = "{} related same-player sale{} anchor the model.".format(
             len(related), "s" if len(related) != 1 else ""
         )
     elif segment:
-        anchor_statement = "{} first-Bowman autograph market-segment sale{} anchor the model.".format(
+        anchor_statement = "{} all-time first-Bowman autograph market-segment sale{} anchor the model.".format(
             len(segment), "s" if len(segment) != 1 else ""
         )
-    else:
+    elif broad:
+        anchor_statement = "{} broader similar-card sale{} provide a market segment, not an exact-card match.".format(
+            len(broad), "s" if len(broad) != 1 else ""
+        )
+    elif global_anchors:
+        anchor_statement = "{} all-time observed sales provide only a whole-market baseline, not card-specific evidence.".format(
+            len(global_anchors), "s" if len(global_anchors) != 1 else ""
+        )
+    elif reference_value_cad is not None:
         anchor_statement = "The user-supplied reference value is the only model anchor."
+    else:
+        anchor_statement = "CARDR has no observed sales in this installation, so this is a generic starter-value prior."
+
+    low_confidence = fallback_tier in {
+        "broad_similar_cards",
+        "global_market_baseline",
+        "unanchored_default",
+    }
+    confidence_level = "low" if low_confidence else "medium"
 
     return {
         "status": "predictive",
@@ -454,18 +604,22 @@ def _predictive_valuation(
         "exact_comp_count": 0,
         "related_comp_count": len(anchors),
         "anchor_kind": anchor_kind,
+        "fallback_tier": fallback_tier,
+        "confidence_level": confidence_level,
         "is_predictive": True,
         "baseline_value_cad": round(baseline, 2),
         "scarcity_multiplier": multiplier,
         "prediction_basis": basis,
-        "valuation_method": "Predictive scarcity model calibrated to {}.".format(basis),
+        "valuation_method": "Predictive fallback model calibrated to {}.".format(basis),
         "rationale": [
             "No exact completed sale is stored for this card; this is a model prediction, not a confirmed market price.",
             "Baseline: {} of ${:.2f} CAD, adjusted by a {} ({:.2f}×).".format(
                 basis, baseline, scarcity_label, multiplier
             ),
             anchor_statement,
-            "The range is intentionally wide because rarity premiums are uncertain and collector demand can move sharply.",
+            "LOW CONFIDENCE: the range is intentionally wide because rarity premiums and collector demand can move sharply."
+            if low_confidence
+            else "The range is intentionally wide because rarity premiums are uncertain and collector demand can move sharply.",
             "This is not investment advice or a future-price guarantee.",
         ],
         "comps": [comp.as_dict() for comp in anchors],
@@ -484,15 +638,15 @@ def calculate_valuation(
     reference_value_cad: Optional[float] = None,
     first_bowman_auto: bool = False,
 ) -> Dict[str, object]:
-    """Return a transparent CAD valuation, or an honest insufficient-data state."""
+    """Return a direct estimate or an explicitly low-confidence fallback."""
     today = today or date.today()
     sales = list(sales)
     candidates = find_comps(card, sales)
     comps = _remove_outliers(candidates)
 
     # A sale of the exact card always wins over a scarcity-model prediction.
-    # Otherwise, explicitly requested predictive mode may estimate rare cards
-    # from related same-player evidence or a user-provided anchor.
+    # Any no-direct-comp path now follows the fallback ladder so every card
+    # receives a clearly disclosed estimate, including on a fresh database.
     if predictive_mode and not any(comp.level == "exact" for comp in comps):
         return _predictive_valuation(
             card,
@@ -505,26 +659,15 @@ def calculate_valuation(
         )
 
     if not comps:
-        return {
-            "status": "insufficient_data",
-            "estimated_value_cad": None,
-            "low_estimate_cad": None,
-            "high_estimate_cad": None,
-            "confidence_percent": 0,
-            "evidence_score": 0,
-            "comp_count": 0,
-            "exact_comp_count": 0,
-            "related_comp_count": 0,
-            "anchor_kind": "none",
-            "is_predictive": False,
-            "valuation_method": "No estimate without stored, non-demo comparable sales.",
-            "rationale": [
-                "Prospectr has no qualifying stored sales for this card yet.",
-                "Import completed marketplace sales or connect a market-data source before relying on a price.",
-            ],
-            "comps": [],
-            "sales_chart": [],
-        }
+        return _predictive_valuation(
+            card,
+            sales,
+            today,
+            one_of_one=one_of_one,
+            print_run=print_run,
+            reference_value_cad=reference_value_cad,
+            first_bowman_auto=first_bowman_auto,
+        )
 
     weighted_prices = [(comp.sale.price_cad, _weight(comp, today)) for comp in comps]
     estimate = _weighted_quantile(weighted_prices, 0.5)
@@ -542,6 +685,11 @@ def calculate_valuation(
     exact_count = sum(comp.level == "exact" for comp in comps)
     excluded_count = len(candidates) - len(comps)
     confidence = _confidence(comps, today)
+    # Same-player/product evidence can be useful, but a supplied card number
+    # that is absent from every listing should never yield an exact-card-level
+    # confidence badge.
+    if card.card_number and not exact_count:
+        confidence = min(72, confidence)
     return {
         "status": "estimated",
         "estimated_value_cad": round(estimate, 2),
@@ -553,6 +701,8 @@ def calculate_valuation(
         "exact_comp_count": exact_count,
         "related_comp_count": 0,
         "anchor_kind": "exact_or_direct_comps",
+        "fallback_tier": "direct_comparable_sales",
+        "confidence_level": "high" if exact_count and confidence >= 65 else "medium",
         "is_predictive": False,
         "valuation_method": "Recency- and match-quality-weighted stored comparable sales.",
         "rationale": _rationale(comps, card, excluded_count),

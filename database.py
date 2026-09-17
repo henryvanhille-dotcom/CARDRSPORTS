@@ -61,6 +61,7 @@ def initialize_database():
                 year INTEGER,
                 set_name TEXT,
                 card_type TEXT,
+                card_number TEXT,
                 parallel TEXT,
                 grade TEXT,
 
@@ -92,6 +93,13 @@ def initialize_database():
             "is_autograph": "INTEGER DEFAULT 0",
             "autograph_type": "TEXT",
             "match_confidence": "TEXT DEFAULT 'unknown'",
+            # Source-aware identity fields make historical imports auditable
+            # instead of relying solely on a query label or title parsing.
+            "card_number": "TEXT",
+            "source_sale_id": "TEXT",
+            "source_currency": "TEXT",
+            "fx_rate_to_cad": "REAL",
+            "identity_status": "TEXT DEFAULT 'legacy_unverified'",
         }
 
         for column, definition in migrations.items():
@@ -163,6 +171,7 @@ def initialize_database():
                 year,
                 set_name,
                 card_type,
+                card_number,
                 parallel,
                 grade
             )
@@ -171,6 +180,11 @@ def initialize_database():
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_sales_date
             ON sales(sale_date)
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sales_identity
+            ON sales(player, year, set_name, card_number, parallel, grade)
         """)
 
         cursor.execute("""
@@ -307,6 +321,15 @@ def save_sales(
 
             confirmed = optional_bool(sale.get("price_confirmed"))
             is_autograph = optional_bool(sale.get("is_autograph")) or 0
+            # Prefer fields carried by the market provider.  Query values are
+            # used only as a verified fallback after ebay.score_sale() has
+            # accepted the listing, which prevents a broad search from
+            # relabelling every returned row as the same card.
+            stored_player = str(sale.get("source_player") or player or "").strip()
+            stored_year = str(sale.get("source_year") or year or "").strip()
+            stored_set_name = str(sale.get("source_set_name") or set_name or "").strip()
+            stored_card_type = str(sale.get("source_card_type") or card_type or "").strip()
+            stored_parallel = str(sale.get("source_parallel") or parallel or "").strip()
 
             cursor.execute("""
                 INSERT INTO sales (
@@ -339,8 +362,13 @@ def save_sales(
                     year,
                     set_name,
                     card_type,
+                    card_number,
                     parallel,
                     grade,
+                    source_sale_id,
+                    source_currency,
+                    fx_rate_to_cad,
+                    identity_status,
 
                     is_autograph,
                     autograph_type,
@@ -358,7 +386,7 @@ def save_sales(
                     ?, ?,
                     ?,
                     ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?,
                     ?,
                     ?
@@ -402,6 +430,13 @@ def save_sales(
                     grading_company =
                         excluded.grading_company,
 
+                    card_number = COALESCE(excluded.card_number, sales.card_number),
+
+                    source_sale_id = COALESCE(excluded.source_sale_id, sales.source_sale_id),
+                    source_currency = COALESCE(excluded.source_currency, sales.source_currency),
+                    fx_rate_to_cad = COALESCE(excluded.fx_rate_to_cad, sales.fx_rate_to_cad),
+                    identity_status = excluded.identity_status,
+
                     is_autograph =
                         excluded.is_autograph,
 
@@ -437,12 +472,17 @@ def save_sales(
                 sale.get("grader"),
                 sale.get("grading_company"),
 
-                player,
-                year,
-                set_name,
-                card_type,
-                parallel,
+                stored_player,
+                stored_year,
+                stored_set_name,
+                stored_card_type,
+                sale.get("card_number") or None,
+                stored_parallel,
                 sale.get("grade") or grade,
+                sale.get("source_sale_id") or sale_id,
+                sale.get("source_currency") or sale.get("currency"),
+                safe_float(sale.get("fx_rate_to_cad")),
+                sale.get("identity_status") or "query_verified",
 
                 is_autograph,
                 sale.get("autograph_type"),

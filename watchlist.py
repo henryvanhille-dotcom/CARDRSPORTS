@@ -28,6 +28,14 @@ MAX_MONEY_CAD = 10_000_000
 PRIORITY_LEVELS = {0, 1, 2}
 
 
+def _owner_clause(owner_id: Optional[str]) -> tuple[str, List[Any]]:
+    """Scope Watchlist queries to one authenticated collector or local guest."""
+
+    if owner_id is None:
+        return "owner_id IS NULL", []
+    return "owner_id = ?", [owner_id]
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -148,6 +156,15 @@ def canonical_card_key(values: Dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _scoped_card_key(values: Dict[str, Any], owner_id: Optional[str]) -> str:
+    """Preserve legacy guest keys while allowing collectors to watch the same card."""
+
+    card_key = canonical_card_key(values)
+    if owner_id is None:
+        return card_key
+    return hashlib.sha256("{}|{}".format(owner_id, card_key).encode("utf-8")).hexdigest()
+
+
 def initialize_watchlist() -> None:
     """Create the Watchlist table and indexes without touching existing tables."""
     initialize_database()
@@ -155,6 +172,7 @@ def initialize_watchlist() -> None:
         connection.execute("""
             CREATE TABLE IF NOT EXISTS watchlist_cards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id TEXT,
                 card_key TEXT NOT NULL UNIQUE,
                 player TEXT NOT NULL,
                 year INTEGER,
@@ -173,31 +191,49 @@ def initialize_watchlist() -> None:
                 updated_at TEXT NOT NULL
             )
         """)
+        existing_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(watchlist_cards)").fetchall()
+        }
+        if "owner_id" not in existing_columns:
+            connection.execute("ALTER TABLE watchlist_cards ADD COLUMN owner_id TEXT")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_watchlist_created ON watchlist_cards(created_at)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_watchlist_priority ON watchlist_cards(priority, created_at)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_watchlist_player ON watchlist_cards(player)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_watchlist_owner_created ON watchlist_cards(owner_id, created_at)")
         connection.commit()
 
 
-def _row(watchlist_id: int) -> Optional[Dict[str, Any]]:
+def _row(watchlist_id: int, owner_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    owner_sql, owner_params = _owner_clause(owner_id)
     with get_connection() as connection:
-        row = connection.execute("SELECT * FROM watchlist_cards WHERE id = ?", (watchlist_id,)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM watchlist_cards WHERE id = ? AND {}".format(owner_sql),
+            [watchlist_id, *owner_params],
+        ).fetchone()
     return dict(row) if row is not None else None
 
 
 def _market_context(card: Dict[str, Any], observed_sales: Iterable[Any]) -> Dict[str, Any]:
-    """Attach only a live, evidence-backed estimate; no prediction mode is used."""
+    """Attach a direct estimate or visibly disclosed low-confidence fallback."""
     valuation = calculate_valuation(CardQuery.from_mapping(card), observed_sales)
-    estimate = valuation.get("estimated_value_cad") if valuation.get("status") == "estimated" else None
+    estimate = (
+        valuation.get("estimated_value_cad")
+        if valuation.get("status") in {"estimated", "predictive"}
+        else None
+    )
     market = {
         "status": valuation.get("status", "insufficient_data"),
         "estimated_value_cad": estimate,
         "confidence_percent": valuation.get("confidence_percent", 0) if estimate is not None else 0,
         "comp_count": valuation.get("comp_count", 0) if estimate is not None else 0,
         "exact_comp_count": valuation.get("exact_comp_count", 0) if estimate is not None else 0,
+        "confidence_level": valuation.get("confidence_level", "low") if estimate is not None else None,
+        "fallback_tier": valuation.get("fallback_tier") if estimate is not None else None,
     }
     if estimate is None:
         market["message"] = "Market data isn't available for this card yet."
+    elif market["confidence_level"] == "low":
+        market["message"] = "Low-confidence Prospectr estimate based on broader market signals, not an exact-card sale."
     return market
 
 
@@ -218,24 +254,24 @@ def _enrich(card: Dict[str, Any], observed_sales: Iterable[Any]) -> Dict[str, An
     return result
 
 
-def add_watchlist_card(**values: Any) -> Dict[str, Any]:
+def add_watchlist_card(owner_id: Optional[str] = None, **values: Any) -> Dict[str, Any]:
     initialize_watchlist()
     clean = _normalize_values(values, require_player=True)
     # Populate omitted optional fields so the persisted metadata is stable.
     for field in ("year", "set_name", "card_number", "card_type", "parallel", "serial_total", "grade", "grading_company", "image_url", "target_price_cad", "notes", "priority"):
         clean.setdefault(field, None if field not in {"set_name", "card_number", "card_type", "parallel", "grade", "grading_company", "notes", "priority"} else (0 if field == "priority" else ""))
-    clean["card_key"] = canonical_card_key(clean)
+    clean["card_key"] = _scoped_card_key(clean, owner_id)
     now = _now()
     try:
         with get_connection() as connection:
             cursor = connection.execute("""
                 INSERT INTO watchlist_cards (
-                    card_key, player, year, set_name, card_number, card_type,
+                    owner_id, card_key, player, year, set_name, card_number, card_type,
                     parallel, serial_total, grade, grading_company, image_url,
                     target_price_cad, notes, priority, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                clean["card_key"], clean["player"], clean["year"], clean["set_name"],
+                owner_id, clean["card_key"], clean["player"], clean["year"], clean["set_name"],
                 clean["card_number"], clean["card_type"], clean["parallel"],
                 clean["serial_total"], clean["grade"], clean["grading_company"],
                 clean["image_url"], clean["target_price_cad"], clean["notes"],
@@ -245,21 +281,26 @@ def add_watchlist_card(**values: Any) -> Dict[str, Any]:
             connection.commit()
     except sqlite3.IntegrityError:
         raise ValueError("This card is already on the Watchlist.")
-    return get_watchlist_card(watchlist_id)  # type: ignore[return-value]
+    return get_watchlist_card(watchlist_id, owner_id=owner_id)  # type: ignore[return-value]
 
 
-def get_watchlist_card(watchlist_id: int) -> Optional[Dict[str, Any]]:
+def get_watchlist_card(watchlist_id: int, owner_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     initialize_watchlist()
-    card = _row(watchlist_id)
+    card = _row(watchlist_id, owner_id=owner_id)
     if card is None:
         return None
     return _enrich(card, SalesRepository(BASE_DIR, db_path=database.DATABASE).all_observed_sales())
 
 
-def get_watchlist_cards(search: str = "", priority_only: bool = False) -> List[Dict[str, Any]]:
+def get_watchlist_cards(
+    search: str = "",
+    priority_only: bool = False,
+    owner_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     initialize_watchlist()
-    query = "SELECT * FROM watchlist_cards WHERE 1 = 1"
-    params: List[Any] = []
+    owner_sql, owner_params = _owner_clause(owner_id)
+    query = "SELECT * FROM watchlist_cards WHERE {}".format(owner_sql)
+    params: List[Any] = list(owner_params)
     if search.strip():
         query += " AND (player LIKE ? OR set_name LIKE ? OR card_number LIKE ? OR parallel LIKE ?)"
         pattern = "%{}%".format(search.strip())
@@ -273,48 +314,62 @@ def get_watchlist_cards(search: str = "", priority_only: bool = False) -> List[D
     return [_enrich(card, sales) for card in cards]
 
 
-def update_watchlist_card(watchlist_id: int, **updates: Any) -> Optional[Dict[str, Any]]:
+def update_watchlist_card(
+    watchlist_id: int,
+    owner_id: Optional[str] = None,
+    **updates: Any,
+) -> Optional[Dict[str, Any]]:
     initialize_watchlist()
     allowed = {"player", "year", "set_name", "card_number", "card_type", "parallel", "serial_total", "grade", "grading_company", "image_url", "target_price_cad", "notes", "priority"}
     requested = {key: value for key, value in updates.items() if key in allowed}
-    current = _row(watchlist_id)
+    current = _row(watchlist_id, owner_id=owner_id)
     if current is None:
         return None
     if not requested:
-        return get_watchlist_card(watchlist_id)
+        return get_watchlist_card(watchlist_id, owner_id=owner_id)
     clean = _normalize_values(requested, require_player=False)
     merged = dict(current)
     merged.update(clean)
     if not merged.get("player"):
         raise ValueError("Player is required.")
-    clean["card_key"] = canonical_card_key(merged)
+    clean["card_key"] = _scoped_card_key(merged, owner_id)
     clean["updated_at"] = _now()
     assignments = ", ".join("{} = ?".format(key) for key in clean)
+    owner_sql, owner_params = _owner_clause(owner_id)
     try:
         with get_connection() as connection:
-            connection.execute("UPDATE watchlist_cards SET {} WHERE id = ?".format(assignments), [*clean.values(), watchlist_id])
+            connection.execute(
+                "UPDATE watchlist_cards SET {} WHERE id = ? AND {}".format(assignments, owner_sql),
+                [*clean.values(), watchlist_id, *owner_params],
+            )
             connection.commit()
     except sqlite3.IntegrityError:
         raise ValueError("This card is already on the Watchlist.")
-    return get_watchlist_card(watchlist_id)
+    return get_watchlist_card(watchlist_id, owner_id=owner_id)
 
 
-def delete_watchlist_card(watchlist_id: int) -> bool:
+def delete_watchlist_card(watchlist_id: int, owner_id: Optional[str] = None) -> bool:
     initialize_watchlist()
+    owner_sql, owner_params = _owner_clause(owner_id)
     with get_connection() as connection:
-        cursor = connection.execute("DELETE FROM watchlist_cards WHERE id = ?", (watchlist_id,))
+        cursor = connection.execute(
+            "DELETE FROM watchlist_cards WHERE id = ? AND {}".format(owner_sql),
+            [watchlist_id, *owner_params],
+        )
         connection.commit()
     return cursor.rowcount > 0
 
 
-def get_watchlist_summary() -> Dict[str, int]:
+def get_watchlist_summary(owner_id: Optional[str] = None) -> Dict[str, int]:
     """Return counts only; value totals would be misleading without estimates."""
     initialize_watchlist()
+    owner_sql, owner_params = _owner_clause(owner_id)
     with get_connection() as connection:
         row = connection.execute("""
             SELECT COUNT(*) AS card_count,
                    COALESCE(SUM(CASE WHEN priority > 0 THEN 1 ELSE 0 END), 0) AS priority_count,
                    COALESCE(SUM(CASE WHEN target_price_cad IS NOT NULL THEN 1 ELSE 0 END), 0) AS target_count
             FROM watchlist_cards
-        """).fetchone()
+            WHERE {}
+        """.format(owner_sql), owner_params).fetchone()
     return dict(row)

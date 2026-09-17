@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" href="/static/icons/cardr-icon.svg" type="image/svg+xml">
+  <title>Cardr collector profile</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b1220;--surface:#142239;--line:rgba(203,213,225,.17);--text:#f7f9fd;--muted:#9aa9c1;--blue:#75baff;--gold:#f4c976}*{box-sizing:border-box}body{margin:0;background:radial-gradient(54rem 34rem at 5% -15%,rgba(71,139,255,.18),transparent 65%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.shell{width:min(960px,calc(100% - 32px));margin:auto;padding:22px 0 48px}.brand{display:inline-flex;align-items:center;gap:9px;color:var(--text);font-size:18px;font-weight:950;letter-spacing:1.4px;text-decoration:none}.mark{display:grid;width:29px;height:29px;place-items:center;border-radius:9px;color:#07111d;background:var(--blue)}.hero{margin-top:34px;padding:clamp(24px,6vw,48px);border:1px solid var(--line);border-radius:23px;background:linear-gradient(140deg,rgba(20,34,57,.96),rgba(26,31,77,.9));box-shadow:0 22px 54px rgba(0,0,0,.23)}.eyebrow{color:var(--blue);font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase}.hero h1{margin:9px 0 7px;font-size:clamp(33px,7vw,58px);letter-spacing:-2px}.hero p{max-width:620px;margin:0;color:var(--muted);line-height:1.58}.meta{margin-top:15px;color:var(--gold);font-size:12px;font-weight:800}.section{margin-top:28px}.section h2{margin:0 0 12px;font-size:17px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:11px}.card{overflow:hidden;border:1px solid var(--line);border-radius:16px;background:var(--surface)}.art{display:grid;height:134px;place-items:center;overflow:hidden;color:var(--blue);background:linear-gradient(145deg,rgba(117,186,255,.17),#101b2d);font-size:25px;font-weight:900}.art img{width:100%;height:100%;object-fit:cover}.body{padding:13px}.name{overflow:hidden;font-size:14px;font-weight:900;text-overflow:ellipsis;white-space:nowrap}.detail{min-height:30px;margin-top:4px;color:var(--muted);font-size:11px;line-height:1.45}.value{margin-top:12px;color:var(--blue);font-size:18px;font-weight:930}.confidence{margin-top:3px;color:var(--muted);font-size:10px}.empty{padding:26px;border:1px dashed var(--line);border-radius:16px;color:var(--muted);text-align:center}.footer{margin-top:28px;color:var(--muted);font-size:11px;line-height:1.55}.footer a{color:var(--blue)}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <a class="brand" href="/"><span class="mark">C</span>CARDR.</a>
+    <section class="hero" id="profile"><div class="eyebrow">Collector profile</div><h1>Loading profile…</h1><p>Cardr shares only information a collector has chosen to make public.</p></section>
+    <section class="section"><h2>Featured collection</h2><div class="grid" id="cards"><div class="empty">Loading public cards…</div></div></section>
+    <p class="footer">Values are evidence-backed estimates, not offers or investment advice. Purchase prices and private notes are never shown. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+  </main>
+  <script>
+    const handle={{ handle|tojson }};
+    const safe=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+    const money=value=>value===null||value===undefined||!Number.isFinite(Number(value))?"Value not analyzed":new Intl.NumberFormat("en-CA",{style:"currency",currency:"CAD"}).format(Number(value));
+    const details=card=>[card.year,card.set_name,card.card_type,card.card_number?(String(card.card_number).startsWith("#")?card.card_number:"#"+card.card_number):"",card.parallel,card.grade].filter(Boolean).join(" · ");
+    const initials=name=>String(name||"?").split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join("").toUpperCase()||"?";
+    const safeImage=value=>/^(https:\/\/|\/uploads\/[A-Za-z0-9._-]+$)/i.test(String(value||""))?String(value):"";
+    fetch("/api/public/"+encodeURIComponent(handle)).then(async response=>{const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||"Profile unavailable.");return data;}).then(data=>{const profile=data.profile;document.title=`${profile.display_name} on Cardr`;document.querySelector("#profile").innerHTML=`<div class="eyebrow">Collector profile · @${safe(profile.profile_handle)}</div><h1>${safe(profile.display_name)}</h1><p>${safe(profile.bio||"Collecting with Cardr.")}</p><div class="meta">${data.cards.length} public card${data.cards.length===1?"":"s"} · shared by choice</div>`;const cards=data.cards||[];document.querySelector("#cards").innerHTML=cards.length?cards.map(card=>{const image=safeImage(card.image_url);return `<article class="card"><div class="art">${image?`<img src="${safe(image)}" alt="" onerror="this.remove()">`:safe(initials(card.player))}</div><div class="body"><div class="name">${safe(card.player)}</div><div class="detail">${safe(details(card)||"Card details")}</div><div class="value">${money(card.estimated_value_cad)}</div><div class="confidence">${card.estimated_value_cad===null||card.estimated_value_cad===undefined?"Not analyzed":`${safe(card.value_confidence||0)}% evidence confidence`}</div></div></article>`;}).join(""):`<div class="empty">This collector has not chosen any cards to share yet.</div>`;}).catch(error=>{document.querySelector("#profile").innerHTML=`<div class="eyebrow">Cardr</div><h1>Profile unavailable</h1><p>${safe(error.message)}</p>`;document.querySelector("#cards").innerHTML=`<div class="empty">This profile may be private or no longer available.</div>`;});
+  </script>
+</body>
+</html>

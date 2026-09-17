@@ -13,6 +13,11 @@ services:
         value: /var/data
       - key: CARDR_ALLOWED_HOSTS
         value: cardrsports.com,www.cardrsports.com,*.onrender.com
+      # Never expose an unscoped local guest Vault on a public deployment.
+      - key: CARDR_GUEST_MODE
+        value: "false"
+      - key: CARDR_COOKIE_SECURE
+        value: "true"
     disk:
       name: cardr-data
       mountPath: /var/data

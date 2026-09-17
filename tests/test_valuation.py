@@ -78,10 +78,13 @@ class ValuationTests(unittest.TestCase):
             grade="PSA 9",
         )
 
-    def test_no_stored_sales_means_no_dollar_estimate(self):
+    def test_no_stored_sales_returns_a_clearly_labelled_starter_value(self):
         result = calculate_valuation(self.card, [], today=date(2026, 9, 7))
-        self.assertEqual("insufficient_data", result["status"])
-        self.assertIsNone(result["estimated_value_cad"])
+        self.assertEqual("predictive", result["status"])
+        self.assertEqual(25.0, result["estimated_value_cad"])
+        self.assertEqual("unanchored_default", result["anchor_kind"])
+        self.assertEqual("low", result["confidence_level"])
+        self.assertEqual(2, result["confidence_percent"])
         self.assertEqual(0, result["comp_count"])
 
     def test_exact_card_sales_produce_a_transparent_estimate(self):
@@ -102,9 +105,43 @@ class ValuationTests(unittest.TestCase):
             [sale("other-card", 475, card_number="101")],
             today=date(2026, 9, 7),
         )
-        self.assertEqual("estimated", result["status"])
+        self.assertEqual("predictive", result["status"])
         self.assertEqual(0, result["exact_comp_count"])
-        self.assertNotEqual("exact", result["comps"][0]["match_level"])
+        self.assertEqual("related_player_sales", result["anchor_kind"])
+
+    def test_broader_similar_cards_are_low_confidence_not_direct_comps(self):
+        target = CardQuery(
+            player="New Prospect",
+            year="2024",
+            set_name="Bowman Chrome",
+            card_type="RC",
+            card_number="BCP-99",
+            grade="Raw",
+        )
+        segment_sales = [
+            Sale(
+                id="broad-{}".format(price),
+                player="Different Player",
+                year="2024",
+                set_name="Bowman Chrome",
+                card_type="RC",
+                card_number="BCP-{}".format(price),
+                parallel="Base",
+                grade="Raw",
+                price_cad=price,
+                sale_date=date(2024, 6, 1),
+                platform="eBay",
+                listing_url="https://example.test/broad-{}".format(price),
+                title="2024 Bowman Chrome Different Player #BCP-{}".format(price),
+            )
+            for price in (100, 200, 300)
+        ]
+        result = calculate_valuation(target, segment_sales, today=date(2026, 9, 7))
+        self.assertEqual("predictive", result["status"])
+        self.assertEqual("broad_similar_card_sales", result["anchor_kind"])
+        self.assertEqual("low", result["confidence_level"])
+        self.assertEqual(0, result["exact_comp_count"])
+        self.assertTrue(all(comp["match_level"] == "broad_similar_card" for comp in result["comps"]))
 
     def test_one_of_one_without_an_exact_sale_uses_a_clearly_labelled_prediction(self):
         one_of_one = CardQuery(
@@ -131,7 +168,7 @@ class ValuationTests(unittest.TestCase):
         self.assertEqual(900.0, result["estimated_value_cad"])
         self.assertLessEqual(result["confidence_percent"], 48)
 
-    def test_predictive_mode_requires_an_anchor_when_no_related_sales_exist(self):
+    def test_predictive_mode_uses_a_low_confidence_default_when_no_anchor_exists(self):
         unknown_card = CardQuery(player="No Evidence", year="2024", set_name="Unknown Set")
         result = calculate_valuation(
             unknown_card,
@@ -139,8 +176,10 @@ class ValuationTests(unittest.TestCase):
             predictive_mode=True,
             one_of_one=True,
         )
-        self.assertEqual("insufficient_data", result["status"])
-        self.assertIsNone(result["estimated_value_cad"])
+        self.assertEqual("predictive", result["status"])
+        self.assertEqual("unanchored_default", result["anchor_kind"])
+        self.assertEqual("low", result["confidence_level"])
+        self.assertEqual(25.0, result["estimated_value_cad"])
 
         anchored = calculate_valuation(
             unknown_card,
@@ -187,7 +226,7 @@ class ValuationTests(unittest.TestCase):
         )
         self.assertEqual("predictive", result["status"])
         self.assertEqual("first_bowman_auto_segment", result["anchor_kind"])
-        self.assertEqual("recent first-Bowman autograph market segment", result["prediction_basis"])
+        self.assertEqual("all-time first-Bowman autograph market segment", result["prediction_basis"])
         self.assertEqual(200.0, result["estimated_value_cad"])
         self.assertEqual(3, result["related_comp_count"])
         self.assertEqual(1, len(result["sales_chart"]))
@@ -271,7 +310,7 @@ class VaultTests(unittest.TestCase):
         self.assertEqual(100.0, summary["valued_cost_basis_cad"])
         self.assertEqual(25.0, summary["total_profit_loss_percent"])
 
-    def test_vault_analysis_uses_stored_sales_and_never_invents_a_value(self):
+    def test_vault_analysis_uses_direct_sales_or_a_disclosed_low_confidence_value(self):
         with (self.base_dir / "sales_data.csv").open("w", newline="") as handle:
             writer = csv.DictWriter(
                 handle,
@@ -299,9 +338,10 @@ class VaultTests(unittest.TestCase):
 
         no_data = vault.add_vault_card(player="No Evidence", year=2024, set_name="Test Set")
         no_data_result = vault.analyze_vault_card(no_data["id"])
-        self.assertEqual("insufficient_data", no_data_result["valuation"]["status"])
-        self.assertIsNone(no_data_result["card"]["estimated_value_cad"])
-        self.assertEqual("insufficient_data", no_data_result["card"]["prospectr_status"])
+        self.assertEqual("predictive", no_data_result["valuation"]["status"])
+        self.assertEqual("low", no_data_result["valuation"]["confidence_level"])
+        self.assertEqual(300.0, no_data_result["card"]["estimated_value_cad"])
+        self.assertEqual("low_confidence", no_data_result["card"]["prospectr_status"])
 
 
 if __name__ == "__main__":
